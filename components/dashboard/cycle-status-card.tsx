@@ -16,7 +16,9 @@ export function CycleStatusCard({ latest }: { latest: FuelCycle | undefined }) {
   }
 
   const estimatedRangeKm =
-    latest.pump_truth_kml != null ? latest.true_reserve_liters * latest.pump_truth_kml : null;
+    latest.pump_truth_kml != null && latest.true_reserve_liters != null
+      ? latest.true_reserve_liters * latest.pump_truth_kml
+      : null;
 
   return (
     <Card>
@@ -25,7 +27,10 @@ export function CycleStatusCard({ latest }: { latest: FuelCycle | undefined }) {
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-4">
         <Stat label="קילומטראז'" value={`${latest.total_odometer_km.toLocaleString("he-IL")} ק"מ`} />
-        <Stat label="רזרבה אמיתית" value={`${latest.true_reserve_liters.toFixed(1)} ליטר`} />
+        <Stat
+          label="רזרבה אמיתית"
+          value={latest.true_reserve_liters != null ? `${latest.true_reserve_liters.toFixed(1)} ליטר` : "—"}
+        />
         <Stat
           label="אמת המשאבה"
           value={latest.pump_truth_kml != null ? `${latest.pump_truth_kml.toFixed(2)} ק"מ/ליטר` : "—"}

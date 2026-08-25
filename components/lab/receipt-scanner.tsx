@@ -10,6 +10,7 @@ import {
   RotateCcw,
   ScanLine,
   TriangleAlert,
+  Wand2,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { DEFAULT_TANK_CAPACITY_LITERS } from "@/lib/settings";
 import type { PaymentMethod } from "@/lib/types";
 
 type Status = "idle" | "capturing" | "extracting" | "review" | "saving" | "done";
@@ -51,6 +53,7 @@ type DraftFields = {
   pumped_liters: string;
   full_price_paid: string;
   payment_method: PaymentMethod;
+  estimated_range: string;
 };
 
 const REQUIRED_FIELD_LABELS: Partial<Record<keyof DraftFields, string>> = {
@@ -79,6 +82,7 @@ export function ReceiptScanner({
   const [error, setError] = useState<string | null>(null);
   const [extractionFailed, setExtractionFailed] = useState(false);
   const [draft, setDraft] = useState<DraftFields | null>(null);
+  const [isRangeAutoCalculated, setIsRangeAutoCalculated] = useState(false);
 
   const hasAnyImage = images.receipt !== null || images.dashboard !== null;
 
@@ -143,7 +147,9 @@ export function ReceiptScanner({
     try {
       const orderedBase64 = presentSlots.map((slot) => images[slot]!.base64);
       const extraction = await extractReceiptData(orderedBase64);
-      setDraft(draftFromExtraction(extraction, lastOdometerKm));
+      const newDraft = draftFromExtraction(extraction, lastOdometerKm);
+      setDraft(newDraft);
+      setIsRangeAutoCalculated(newDraft.estimated_range !== "");
     } catch (err) {
       // The photos are already safely uploaded — don't throw them away just
       // because auto-fill failed. Drop into review with a blank, fully
@@ -151,6 +157,7 @@ export function ReceiptScanner({
       console.error("Receipt extraction failed:", err);
       setExtractionFailed(true);
       setDraft(emptyDraft());
+      setIsRangeAutoCalculated(false);
     }
     setStatus("review");
   }
@@ -171,6 +178,7 @@ export function ReceiptScanner({
     setDraft(null);
     setError(null);
     setExtractionFailed(false);
+    setIsRangeAutoCalculated(false);
   }
 
   async function handleSave() {
@@ -199,6 +207,7 @@ export function ReceiptScanner({
         payment_method: draft.payment_method,
         receipt_image_path: storagePaths.receipt ?? null,
         dashboard_image_path: storagePaths.dashboard ?? null,
+        estimated_range: draft.estimated_range.trim() ? Math.round(Number(draft.estimated_range)) : null,
       });
       setStatus("done");
       setTimeout(() => router.push("/dashboard"), 1200);
@@ -211,6 +220,11 @@ export function ReceiptScanner({
 
   function updateDraft<K extends keyof DraftFields>(key: K, value: DraftFields[K]) {
     setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  function handleEstimatedRangeChange(value: string) {
+    setIsRangeAutoCalculated(false);
+    updateDraft("estimated_range", value);
   }
 
   if (status === "idle" || status === "capturing") {
@@ -334,6 +348,23 @@ export function ReceiptScanner({
               inputMode="decimal"
               value={draft.computer_avg_consumption_kml}
               onChange={(v) => updateDraft("computer_avg_consumption_kml", v)}
+            />
+            <Field
+              id="estimated_range"
+              label="טווח נסיעה משוער (ק״מ)"
+              type="number"
+              inputMode="numeric"
+              step="1"
+              value={draft.estimated_range}
+              onChange={handleEstimatedRangeChange}
+              hint={
+                isRangeAutoCalculated ? (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Wand2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    חושב אוטומטית — ניתן לערוך
+                  </p>
+                ) : undefined
+              }
             />
             <Field
               id="pumped_liters"
@@ -480,6 +511,7 @@ function draftFromExtraction(extraction: ReceiptExtraction, lastOdometerKm: numb
     pumped_liters: numberOrEmpty(extraction.pumpedLiters),
     full_price_paid: numberOrEmpty(extraction.fullPricePaid),
     payment_method: "Credit Card",
+    estimated_range: calculateEstimatedRange(extraction.computerAvgConsumption),
   };
 }
 
@@ -493,7 +525,14 @@ function emptyDraft(): DraftFields {
     pumped_liters: "",
     full_price_paid: "",
     payment_method: "Credit Card",
+    estimated_range: "",
   };
+}
+
+/** Initial guess for the full-tank driving range, from the car computer's average consumption. */
+function calculateEstimatedRange(computerAvgConsumptionKml: number | null): string {
+  if (computerAvgConsumptionKml == null || !Number.isFinite(computerAvgConsumptionKml)) return "";
+  return String(Math.round(DEFAULT_TANK_CAPACITY_LITERS * computerAvgConsumptionKml));
 }
 
 function numberOrEmpty(value: number | null): string {
@@ -529,17 +568,20 @@ function Field({
   label,
   value,
   onChange,
+  hint,
   ...props
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
+  hint?: React.ReactNode;
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "id">) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
       <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} {...props} />
+      {hint}
     </div>
   );
 }

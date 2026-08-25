@@ -88,7 +88,9 @@ export function FuelCycleCard({
           </div>
 
           <div className="flex items-center justify-between border-t border-border pt-3">
-            <p className="text-lg font-bold tabular-nums">₪{cycle.net_cost_ils.toFixed(2)}</p>
+            <p className="text-lg font-bold tabular-nums">
+              {cycle.net_cost_ils != null ? `₪${cycle.net_cost_ils.toFixed(2)}` : "—"}
+            </p>
 
             <div className="flex items-center gap-2">
               {receiptImage && <Thumbnail image={receiptImage} onClick={() => setPreviewImage(receiptImage)} />}

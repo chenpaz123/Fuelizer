@@ -2,8 +2,13 @@ export type PaymentMethod = "Pazomat" | "Credit Card";
 
 /**
  * Row shape of `public.fuel_cycles`. Mirrors supabase/migrations/ (0001 plus
- * the 0002/0003 follow-ups). `pump_truth_kml`, `true_reserve_liters`, and
- * `net_cost_ils` are DB-generated columns — never write to them directly.
+ * the 0002-0006 follow-ups).
+ *
+ * `pump_truth_kml` is still a DB-generated column — never write to it
+ * directly. `true_reserve_liters` and `net_cost_ils` are NOT (since
+ * 0006_decouple_calculations.sql): they're plain nullable columns that
+ * app/lab/actions.ts computes and snapshots at insert time from that
+ * user's user_settings as of the fill-up, so nothing else should set them.
  */
 // NOTE: these are `type` aliases rather than `interface`s on purpose — the
 // Database type below is threaded through @supabase/supabase-js's generics,
@@ -23,9 +28,10 @@ export type FuelCycle = {
   payment_method: PaymentMethod;
   receipt_image_path: string | null;
   dashboard_image_path: string | null;
+  estimated_range: number | null; // km; user-editable estimate, not DB-generated
   pump_truth_kml: number | null;
-  true_reserve_liters: number;
-  net_cost_ils: number;
+  true_reserve_liters: number | null;
+  net_cost_ils: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -49,6 +55,11 @@ export type FuelCycleInsert = Pick<
       | "computer_avg_consumption_kml"
       | "receipt_image_path"
       | "dashboard_image_path"
+      | "estimated_range"
+      // Set only by app/lab/actions.ts, computed server-side from
+      // user_settings — never trust these if they ever came from a client.
+      | "true_reserve_liters"
+      | "net_cost_ils"
     >
   >;
 

@@ -135,6 +135,7 @@ function monthLabel(date: Date): string {
   );
 }
 
-function round2(value: number): number {
+/** Rounds to 2 decimal places (ILS amounts). Also used by app/lab/actions.ts. */
+export function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }

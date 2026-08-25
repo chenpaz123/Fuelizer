@@ -16,8 +16,19 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   to live in alongside `receipt_image_path` instead of just sitting
   unreferenced in Storage.
 - `supabase/migrations/0004_user_settings.sql` — a `user_settings` table
-  (Pazomat discount, tank capacity) editable from `/settings`. **Not yet
-  wired into the actual calculations** — see Next steps below.
+  (Pazomat discount, tank capacity) editable from `/settings`.
+- `supabase/migrations/0005_add_estimated_range.sql` — adds
+  `estimated_range` (km, nullable) to `fuel_cycles`. The Lab scanner
+  auto-calculates an initial value from the car computer's average
+  consumption and lets the user override it before saving.
+- `supabase/migrations/0006_decouple_calculations.sql` — turns
+  `net_cost_ils` and `true_reserve_liters` from hardcoded-constant
+  DB-generated columns into plain nullable columns. `app/lab/actions.ts`
+  now computes and snapshots both at insert time from that user's actual
+  `user_settings` row (falling back to the same 0.58 / 35L defaults if
+  they haven't saved one), so a later change to `user_settings` never
+  retroactively rewrites a past fill-up's numbers. See Business logic
+  recap below.
 - `lib/billing.ts` — the 2-month time-shift billing logic and Pazomat
   discount math (`calculateUpcomingBill`, `calculateNetCost`), with tests in
   `lib/billing.test.ts`.
@@ -48,25 +59,37 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
 
 ## Business logic recap
 
-- **Pump Truth** = `trip_distance_km / pumped_liters` (DB-generated column).
-- **True Reserve** = `35 (tank capacity L) - pumped_liters` (DB-generated
-  column).
-- **Net Cost**: Pazomat → `full_price_paid - 0.58 * pumped_liters`; Credit
-  Card → `full_price_paid` (DB-generated column, mirrored in
-  `lib/billing.ts` for the widget breakdown).
+- **Pump Truth** = `trip_distance_km / pumped_liters` (DB-generated column
+  — still hardcoded-free since it has no discount/capacity constant in it).
+- **True Reserve** = `tank_capacity_liters - pumped_liters`, using that
+  user's `user_settings.tank_capacity_liters` (falls back to 35L if they
+  haven't saved a settings row). Computed server-side in
+  `app/lab/actions.ts` and snapshotted onto `fuel_cycles.true_reserve_liters`
+  at insert time — no longer a DB-generated column as of
+  `0006_decouple_calculations.sql`.
+- **Net Cost**: Pazomat → `full_price_paid - pazomat_discount_per_liter *
+  pumped_liters`, using that user's `user_settings.pazomat_discount_per_liter`
+  (falls back to 0.58 ILS/L); Credit Card → `full_price_paid` unchanged.
+  Same deal — computed server-side in `app/lab/actions.ts` and snapshotted
+  onto `fuel_cycles.net_cost_ils` at insert time, not DB-generated anymore.
+- **Estimated Range**: `fuel_cycles.estimated_range` (km) — a plain,
+  always-user-editable column. The Lab scanner pre-fills it with
+  `round(tank_capacity_liters * computer_avg_consumption_kml)` when the OCR
+  found a computer consumption figure, shown with a small "חושב אוטומטית –
+  ניתן לערוך" hint, but it's never recomputed server-side and the user can
+  freely overwrite it before saving.
 - **Upcoming Bill**: sum of Net Cost for every Pazomat transaction whose
   `entry_date` falls exactly two calendar months before the current month
   (fuel pumped in June is billed in August).
 
-The 35L tank capacity and 0.58 ILS/L discount currently live in **three**
-places that all have to be changed together: `fuel_cycles`' generated
-columns (`true_reserve_liters`, `net_cost_ils`) in the SQL migrations,
-`PAZOMAT_DISCOUNT_PER_LITER_ILS` in `lib/billing.ts`, and now also the
-defaults in `supabase/migrations/0004_user_settings.sql` /
-`lib/settings.ts`. `/settings` lets a user save a *different* value per
-user, but nothing downstream reads it yet — the generated columns and
-`lib/billing.ts` still use the hardcoded constants regardless of what's
-saved there. See Next steps.
+Net Cost and True Reserve are now snapshotted per-row from the user's
+*actual* settings at fill-up time, which resolves half of the old
+three-places duplication problem. What's still open: `lib/billing.ts`'s
+`calculateUpcomingBill`/`calculateNetCost` — used by the Dashboard's
+Upcoming Bill widget, which recomputes Net Cost from raw transactions
+rather than reading the snapshotted `fuel_cycles.net_cost_ils` — still use
+the hardcoded `PAZOMAT_DISCOUNT_PER_LITER_ILS` constant instead of that
+user's live `user_settings.pazomat_discount_per_liter`. See Next steps.
 
 ## Local setup
 
@@ -318,16 +341,16 @@ have it, matching this checklist:
 
 ## Next steps
 
-- **Wire `user_settings` into the actual calculations** — right now saving
-  a Pazomat discount or tank capacity on `/settings` doesn't change
-  anything else in the app. This needs: `fuel_cycles.true_reserve_liters`
-  and `.net_cost_ils` to stop being hardcoded-constant generated columns
-  (they'd need to become computed in application code, or a Postgres
-  function that looks up `user_settings`, since generated columns can't
-  reference other tables), and `lib/billing.ts`'s
-  `calculateUpcomingBill`/`calculateNetCost` to take the discount as a
-  parameter instead of the `PAZOMAT_DISCOUNT_PER_LITER_ILS` constant. Real
-  schema-shape work, not a quick follow-up.
+- **Wire `user_settings` into `lib/billing.ts`** — `fuel_cycles.true_reserve_liters`
+  and `.net_cost_ils` are already computed per-row from live
+  `user_settings` (see `app/lab/actions.ts` /
+  `0006_decouple_calculations.sql`), but the Dashboard's Upcoming Bill
+  widget still calls `lib/billing.ts`'s `calculateUpcomingBill`/
+  `calculateNetCost`, which recompute Net Cost from raw transactions using
+  the hardcoded `PAZOMAT_DISCOUNT_PER_LITER_ILS` constant rather than
+  either that user's saved discount or the already-snapshotted
+  `fuel_cycles.net_cost_ils`. Simplest fix is probably to have the widget
+  just sum the snapshotted `net_cost_ils` column instead of recomputing it.
 - Add a car-computer-vs-pump-truth delta stat and a liters-per-100km toggle
   next to the existing km/L chart.
 - Consider a `vehicles` table if you ever track more than one car.
