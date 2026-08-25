@@ -3,6 +3,7 @@ import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { signOutAction } from "./actions";
 import { SettingsForm } from "@/components/settings/settings-form";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DEFAULT_PAZOMAT_DISCOUNT_PER_LITER, DEFAULT_TANK_CAPACITY_LITERS } from "@/lib/settings";
@@ -29,6 +30,15 @@ export default async function SettingsPage() {
         initialPazomatDiscount={settings?.pazomat_discount_per_liter ?? DEFAULT_PAZOMAT_DISCOUNT_PER_LITER}
         initialTankCapacity={settings?.tank_capacity_liters ?? DEFAULT_TANK_CAPACITY_LITERS}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>ערכת נושא</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ThemeToggle />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -20,10 +20,29 @@ export function ConsumptionChart({ cycles }: { cycles: FuelCycle[] }) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-            <XAxis dataKey="date" fontSize={12} tickLine={false} />
-            <YAxis fontSize={12} tickLine={false} width={32} orientation="right" />
-            <Tooltip />
-            <Legend />
+            <XAxis
+              dataKey="date"
+              fontSize={12}
+              tickLine={false}
+              tick={{ fill: "hsl(var(--muted-foreground))" }}
+            />
+            <YAxis
+              fontSize={12}
+              tickLine={false}
+              width={32}
+              orientation="right"
+              tick={{ fill: "hsl(var(--muted-foreground))" }}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "hsl(var(--card))",
+                borderColor: "hsl(var(--border))",
+                borderRadius: "0.75rem",
+                color: "hsl(var(--card-foreground))",
+              }}
+              labelStyle={{ color: "hsl(var(--card-foreground))" }}
+            />
+            <Legend wrapperStyle={{ color: "hsl(var(--foreground))" }} />
             <Line type="monotone" dataKey="computer" name="מחשב הרכב" stroke="#94a3b8" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="pumpTruth" name="אמת המשאבה" stroke="hsl(217 91% 60%)" strokeWidth={2} dot={false} />
           </LineChart>

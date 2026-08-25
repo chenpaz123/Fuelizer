@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
+import { Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { FuelCycleCard } from "@/components/history/fuel-cycle-card";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { FuelCycle } from "@/lib/types";
 
 // Long enough for a single browsing session; regenerated fresh on every
@@ -29,7 +32,17 @@ export default async function HistoryPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold">היסטוריית תדלוקים</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">היסטוריית תדלוקים</h1>
+        {cycles.length > 0 && (
+          // Plain <a>, not next/link: this navigates to a file download
+          // (app/history/export/route.ts), not another page in the app.
+          <a href="/history/export" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+            <Download className="h-4 w-4" />
+            ייצא לאקסל (CSV)
+          </a>
+        )}
+      </div>
 
       {cycles.length === 0 ? (
         <p className="text-center text-sm text-muted-foreground">עדיין לא נרשמו תדלוקים.</p>

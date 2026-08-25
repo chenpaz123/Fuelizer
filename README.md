@@ -46,7 +46,15 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   since the bucket is private) and a delete action that also cleans up the
   Storage objects it referenced.
 - `app/settings` — Pazomat discount / tank capacity form (upserts
-  `user_settings`) and a sign-out button.
+  `user_settings`), a light/dark/system theme toggle
+  (`components/theme/theme-toggle.tsx`), and a sign-out button.
+- `app/history/export/route.ts` — the "ייצא לאקסל (CSV)" button's target: a
+  Route Handler (not a Server Action, since a Server Action can't hand back
+  a downloadable file) that streams the signed-in user's `fuel_cycles` as a
+  UTF-8-BOM'd CSV with `Content-Disposition: attachment`. Formatting itself
+  lives in `lib/csv.ts` (`fuelCyclesToCsv`, tested in `lib/csv.test.ts`).
+- `lib/theme.ts` + inline `<Script strategy="beforeInteractive">` in
+  `app/layout.tsx` — dark mode. See Dark mode below.
 - `app/login` — "Sign in with Google" (Supabase OAuth).
 - `app/auth/callback` — exchanges the Google OAuth code for a session and
   redirects to `/dashboard`.
@@ -326,6 +334,49 @@ have it, matching this checklist:
 | `public/icon-maskable-512x512.png` | 512×512 | Manifest `"maskable"` icon — keep the important content inside the center ~66% (Android crops the rest into various shapes) |
 | `app/icon.png` | 512×512 (or any square ≥192px) | Browser-tab favicon / PWA home-screen icon |
 | `app/apple-icon.png` | 180×180 | iOS home-screen bookmark icon — opaque background, no transparency (iOS ignores alpha and rounds the corners itself) |
+
+## Dark mode
+
+Hand-rolled (no `next-themes` dependency), following the same
+CSS-variable/`tailwind.config.ts` `darkMode: "class"` setup that was already
+in place — since every component already styles itself with semantic
+tokens (`bg-background`, `text-foreground`, `bg-card`, `bg-muted`,
+`border-border`, `bg-primary`, `text-destructive`, …) rather than raw
+Tailwind colors, dark mode is almost entirely `app/globals.css`'s `.dark {
+... }` block redefining those tokens' HSL values — no per-component changes
+needed except `components/dashboard/consumption-chart.tsx` (recharts sets
+its axis-tick/tooltip colors as literal attributes, which don't inherit
+from CSS the way `className`s do, so those are pointed at the same CSS
+variables explicitly via `tick={{ fill: "hsl(var(--muted-foreground))" }}`
+and the Tooltip's `contentStyle`).
+
+- `lib/theme.ts` — `Theme = "light" | "dark" | "system"`, `applyTheme()`
+  (toggles the `dark` class on `<html>`, persists the choice to
+  `localStorage`, keyed `fuelizer-theme`; "system" clears the key rather
+  than storing the literal string), and `THEME_INIT_SCRIPT`, a **raw JS
+  string** (not a TS function it can call) with the same light/dark
+  decision logic, kept in sync by hand.
+- `app/layout.tsx` renders `THEME_INIT_SCRIPT` via
+  `<Script strategy="beforeInteractive">`, so it runs and sets the `dark`
+  class before hydration — no flash of the wrong theme on load. `<html>`
+  carries `suppressHydrationWarning` because of this: the script legitimately
+  changes `<html>`'s class attribute outside of React's own render before
+  hydration runs, which would otherwise log a (harmless, expected) hydration
+  mismatch warning.
+- `components/theme/theme-toggle.tsx` (used on `/settings`) — a three-way
+  light/dark/system control. Reads the current theme via
+  `useSyncExternalStore` rather than `useState` + a mount `useEffect`,
+  specifically to avoid reading `localStorage` during server rendering
+  (where it doesn't exist) and to avoid the extra render an
+  effect-triggered `setState` on mount would cost; `lib/theme.ts` exposes a
+  tiny subscribe/notify pair so `applyTheme()` calls made from a click
+  handler are reflected immediately. While "system" is selected, a
+  `matchMedia` listener also keeps the page in sync live if the OS theme
+  changes without a reload.
+- `app/layout.tsx`'s `viewport.themeColor` is an array of
+  `{ media, color }` descriptors (light `#3c83f6`, dark `#0b0f1a`) rather
+  than one fixed string, so the PWA's browser-chrome/status-bar tint
+  follows system preference too.
 
 ## Deploying
 
