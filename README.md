@@ -11,15 +11,21 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   `v_billing_cycles` (it defaulted to `SECURITY DEFINER`, which bypasses
   `fuel_cycles`' RLS and would let any signed-in user read everyone's fuel
   data through the view) and pins the trigger function's `search_path`.
+- `supabase/migrations/0003_add_dashboard_image.sql` — adds
+  `dashboard_image_path`, so the Lab scanner's dashboard photo has a column
+  to live in alongside `receipt_image_path` instead of just sitting
+  unreferenced in Storage.
 - `lib/billing.ts` — the 2-month time-shift billing logic and Pazomat
   discount math (`calculateUpcomingBill`, `calculateNetCost`), with tests in
   `lib/billing.test.ts`.
 - `app/dashboard` — Upcoming Bill widget, Current Cycle Status, and a
   Computer-vs-Pump-Truth consumption chart.
 - `app/lab` — camera-first fill-up entry: `components/lab/receipt-scanner.tsx`
-  photographs a receipt/dashboard, uploads it to Storage, and calls
-  `actions/ocr.ts` (a Together AI vision model) to auto-fill an editable
-  confirmation card before a server action inserts into `fuel_cycles`.
+  captures a receipt photo and a dashboard photo, uploads both to Storage,
+  and calls `actions/ocr.ts` (a Together AI vision model, given both images
+  in one request) to auto-fill an editable confirmation card before a
+  server action inserts into `fuel_cycles` — receipt and dashboard paths
+  both recorded on the row.
 - `app/login` — "Sign in with Google" (Supabase OAuth).
 - `app/auth/callback` — exchanges the Google OAuth code for a session and
   redirects to `/dashboard`.

@@ -198,6 +198,7 @@ export function ReceiptScanner({
         full_price_paid: Number(draft.full_price_paid),
         payment_method: draft.payment_method,
         receipt_image_path: storagePaths.receipt ?? null,
+        dashboard_image_path: storagePaths.dashboard ?? null,
       });
       setStatus("done");
       setTimeout(() => router.push("/dashboard"), 1200);

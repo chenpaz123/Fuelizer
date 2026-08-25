@@ -1,9 +1,9 @@
 export type PaymentMethod = "Pazomat" | "Credit Card";
 
 /**
- * Row shape of `public.fuel_cycles`. Mirrors supabase/migrations/0001_init_schema.sql.
- * `pump_truth_kml`, `true_reserve_liters`, and `net_cost_ils` are DB-generated
- * columns — never write to them directly.
+ * Row shape of `public.fuel_cycles`. Mirrors supabase/migrations/ (0001 plus
+ * the 0002/0003 follow-ups). `pump_truth_kml`, `true_reserve_liters`, and
+ * `net_cost_ils` are DB-generated columns — never write to them directly.
  */
 // NOTE: these are `type` aliases rather than `interface`s on purpose — the
 // Database type below is threaded through @supabase/supabase-js's generics,
@@ -22,6 +22,7 @@ export type FuelCycle = {
   full_price_paid: number;
   payment_method: PaymentMethod;
   receipt_image_path: string | null;
+  dashboard_image_path: string | null;
   pump_truth_kml: number | null;
   true_reserve_liters: number;
   net_cost_ils: number;
@@ -43,7 +44,11 @@ export type FuelCycleInsert = Pick<
       FuelCycle,
       // user_id defaults to auth.uid() in the DB — only pass it explicitly
       // if you need to (e.g. an admin/service-role insert on someone's behalf).
-      "user_id" | "engine_time" | "computer_avg_consumption_kml" | "receipt_image_path"
+      | "user_id"
+      | "engine_time"
+      | "computer_avg_consumption_kml"
+      | "receipt_image_path"
+      | "dashboard_image_path"
     >
   >;
 
