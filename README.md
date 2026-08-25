@@ -39,6 +39,12 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
 - `app/login` — "Sign in with Google" (Supabase OAuth).
 - `app/auth/callback` — exchanges the Google OAuth code for a session and
   redirects to `/dashboard`.
+- `app/manifest.ts`, `app/icon.png`/`apple-icon.png`, `public/sw.js` — PWA
+  install support. See PWA setup below for why this is a hand-written
+  service worker rather than a plugin.
+- `app/{dashboard,history,lab}/loading.tsx` — instant skeleton shells
+  Next.js streams in during navigation while each page's Supabase fetch is
+  still in flight. See Navigation performance below.
 
 ## Business logic recap
 
@@ -197,6 +203,100 @@ without touching code: open your Together dashboard's
 [Models page](https://api.together.ai/models), filter to Vision +
 Serverless, pick one, and set it as `TOGETHER_VISION_MODEL` in Vercel's
 project environment variables, then redeploy.
+
+## Navigation performance
+
+`/dashboard`, `/history`, and `/lab` are all Server Components that block on
+a Supabase query before rendering anything — without a `loading.tsx`
+sibling, Next.js has no static shell to show, so a tap on the bottom nav
+just... sits there until the fetch resolves. Two things fix that together,
+not either alone:
+
+- **`loading.tsx` in each of those three route folders.** Next
+  automatically wraps the route's `page.tsx` in a `<Suspense
+  fallback={<Loading />}>` boundary whenever a sibling `loading.tsx`
+  exists — no code changes needed in the pages themselves. The skeletons
+  (`components/ui/skeleton.tsx`, a plain `animate-pulse` block) mirror each
+  page's real layout so the swap-in doesn't jump around.
+- **This is also what makes `<Link>` prefetching actually pay off** for
+  these pages. They're dynamic (server-rendered per request via
+  `cookies()`), so Next can't prefetch their real content ahead of a click
+  — but once a route has a `loading.tsx`, that static shell itself becomes
+  prefetchable, so it's often already in the client cache by the time you
+  tap the tab. `components/nav/bottom-nav.tsx` already used `<Link
+  href={...}>` correctly (static hrefs, no `prefetch={false}`) — nothing
+  needed to change there; it just had nothing worth prefetching until now.
+- `components/history/fuel-cycle-card.tsx`'s thumbnails already used
+  `next/image` with `fill` + explicit `sizes` inside fixed-size containers
+  (`h-10 w-10`, `aspect-square`) and no `priority`, so they were already
+  correctly lazy-loaded and CLS-safe — also nothing to change there.
+
+## PWA setup
+
+**A finding worth knowing before you touch this again:** this project
+builds with **Turbopack** (Next 16's default bundler — no `--webpack` flag
+anywhere in `package.json`), and Turbopack does not run webpack plugins at
+all. `@ducanh2912/next-pwa` works by injecting Workbox's webpack plugins
+into a `webpack()` config — under Turbopack that config is not just
+ignored, `next build` hard-errors ("This build is using Turbopack, with a
+`webpack` config and no `turbopack` config"). Confirmed by actually
+installing it and running the build, not just reading about the
+incompatibility. So instead of that plugin:
+
+- `app/manifest.ts` — the standard Next.js file convention; auto-served at
+  `/manifest.webmanifest` (also referenced explicitly via
+  `metadata.manifest` in `app/layout.tsx`, since the file-convention
+  auto-linking behavior wasn't unambiguous in this exact Next version's
+  docs — cheap to be explicit rather than assume).
+- `app/icon.png` / `app/apple-icon.png` — the Next file convention for the
+  browser-tab favicon and iOS home-screen bookmark icon; Next generates the
+  `<link>` tags automatically.
+- `public/sw.js` — a **hand-written** service worker, not build-generated.
+  Turbopack has no hook to inject a precache manifest of hashed asset URLs
+  at build time (that's specifically what the webpack-plugin approach
+  automates), so this uses runtime caching instead: Next's immutable
+  `/_next/static/*` assets are cache-first, page navigations are
+  network-first falling back to the last cached copy of that page, and
+  `/offline` is the final fallback when neither is available.
+  `components/pwa/register-service-worker.tsx` registers it, production
+  builds only (a service worker intercepting fetches in dev would fight
+  Turbopack's Fast Refresh). `next.config.mjs` sets
+  `Cache-Control: no-cache` on `/sw.js` specifically — without that,
+  browsers/CDNs can cache the worker file itself and a logic update never
+  reaches returning users.
+- `app/layout.tsx` exports `viewport` (separately from `metadata`, as
+  required since Next 14) with `themeColor` and `viewportFit: "cover"` —
+  the latter isn't just PWA polish, it's required for
+  `env(safe-area-inset-bottom)` to resolve to anything other than `0` on
+  notched iPhones, which `components/nav/bottom-nav.tsx` already depends
+  on. `metadata.appleWebApp = { capable: true, ... }` is also set; verified
+  in an actual rendered page that this Next version emits the modern,
+  cross-browser `<meta name="mobile-web-app-capable">` tag rather than the
+  legacy Apple-prefixed one — which is the current correct behavior, not a
+  bug, so don't "fix" it back.
+
+All of the above was verified against a real production build+start, not
+just assumed from the code: `/manifest.webmanifest` and `/sw.js` serve the
+expected content and headers, the rendered `<head>` has the right
+`<link>`/`<meta>` tags, and `navigator.serviceWorker.getRegistration()`
+came back `{ active: true }`.
+
+**Icons.** `public/icon-192x192.png`, `icon-512x512.png`, and
+`icon-maskable-512x512.png` (referenced by the manifest) plus
+`app/icon.png` and `app/apple-icon.png` (the favicon/apple-touch-icon
+convention files) already exist — a simple on-brand placeholder (white
+droplet on the app's `#3c83f6` primary blue, generated from an SVG via
+`sharp`, no external design tool needed) so the app is installable right
+now rather than blocked on artwork. Swap in real branding whenever you
+have it, matching this checklist:
+
+| File | Size | Notes |
+| --- | --- | --- |
+| `public/icon-192x192.png` | 192×192 | Manifest `"any"` icon |
+| `public/icon-512x512.png` | 512×512 | Manifest `"any"` icon |
+| `public/icon-maskable-512x512.png` | 512×512 | Manifest `"maskable"` icon — keep the important content inside the center ~66% (Android crops the rest into various shapes) |
+| `app/icon.png` | 512×512 (or any square ≥192px) | Browser-tab favicon / PWA home-screen icon |
+| `app/apple-icon.png` | 180×180 | iOS home-screen bookmark icon — opaque background, no transparency (iOS ignores alpha and rounds the corners itself) |
 
 ## Deploying
 
