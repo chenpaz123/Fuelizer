@@ -1,28 +1,21 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Heebo } from "next/font/google";
+import { BottomNav } from "@/components/nav/bottom-nav";
 import "./globals.css";
+
+const heebo = Heebo({ subsets: ["hebrew", "latin"], variable: "--font-heebo" });
 
 export const metadata: Metadata = {
   title: "Fuelizer",
-  description: "Fuel tracking, telemetry analysis, and billing for the Kia Picanto.",
+  description: "מעקב תדלוקים, טלמטריה וחיוב עבור הקיה פיקנטו שלכם",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>
-        <nav className="border-b border-border">
-          <div className="mx-auto flex max-w-4xl items-center gap-6 px-4 py-3">
-            <span className="font-semibold">Fuelizer</span>
-            <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground">
-              Dashboard
-            </Link>
-            <Link href="/lab" className="text-sm text-muted-foreground hover:text-foreground">
-              Lab
-            </Link>
-          </div>
-        </nav>
-        <main className="mx-auto max-w-4xl px-4 py-8">{children}</main>
+    <html lang="he" dir="rtl" className={heebo.variable}>
+      <body className="font-sans">
+        <main className="mx-auto min-h-screen max-w-md px-4 pb-28 pt-6">{children}</main>
+        <BottomNav />
       </body>
     </html>
   );

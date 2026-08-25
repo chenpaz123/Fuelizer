@@ -6,10 +6,10 @@ export function CycleStatusCard({ latest }: { latest: FuelCycle | undefined }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Current Cycle Status</CardTitle>
+          <CardTitle>מצב המחזור הנוכחי</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No fill-ups logged yet.</p>
+          <p className="text-sm text-muted-foreground">עדיין לא נרשמו תדלוקים.</p>
         </CardContent>
       </Card>
     );
@@ -21,18 +21,18 @@ export function CycleStatusCard({ latest }: { latest: FuelCycle | undefined }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Current Cycle Status</CardTitle>
+        <CardTitle>מצב המחזור הנוכחי</CardTitle>
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-4">
-        <Stat label="Odometer" value={`${latest.total_odometer_km.toLocaleString()} km`} />
-        <Stat label="True Reserve" value={`${latest.true_reserve_liters.toFixed(1)} L`} />
+        <Stat label="קילומטראז'" value={`${latest.total_odometer_km.toLocaleString("he-IL")} ק"מ`} />
+        <Stat label="רזרבה אמיתית" value={`${latest.true_reserve_liters.toFixed(1)} ליטר`} />
         <Stat
-          label="Pump Truth"
-          value={latest.pump_truth_kml != null ? `${latest.pump_truth_kml.toFixed(2)} km/L` : "—"}
+          label="אמת המשאבה"
+          value={latest.pump_truth_kml != null ? `${latest.pump_truth_kml.toFixed(2)} ק"מ/ליטר` : "—"}
         />
         <Stat
-          label="Est. Range Remaining"
-          value={estimatedRangeKm != null ? `${estimatedRangeKm.toFixed(0)} km` : "—"}
+          label="טווח משוער נותר"
+          value={estimatedRangeKm != null ? `${estimatedRangeKm.toFixed(0)} ק"מ` : "—"}
         />
       </CardContent>
     </Card>

@@ -20,7 +20,7 @@ export default async function DashboardPage() {
     .order("entry_date", { ascending: true });
 
   if (error) {
-    return <p className="text-sm text-destructive">Failed to load fuel cycles: {error.message}</p>;
+    return <p className="text-sm text-destructive">טעינת נתוני התדלוקים נכשלה: {error.message}</p>;
   }
 
   const cycles = (data ?? []) as FuelCycle[];
@@ -37,11 +37,10 @@ export default async function DashboardPage() {
   const upcomingBill = calculateUpcomingBill(transactions);
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-6 md:grid-cols-2">
-        <UpcomingBillCard bill={upcomingBill} />
-        <CycleStatusCard latest={latest} />
-      </div>
+    <div className="space-y-5">
+      <h1 className="text-2xl font-bold">דשבורד</h1>
+      <UpcomingBillCard bill={upcomingBill} />
+      <CycleStatusCard latest={latest} />
       <ConsumptionChart cycles={cycles} />
     </div>
   );

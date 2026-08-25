@@ -4,18 +4,19 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    /* Soft grouped background so white cards read as "floating" above it. */
+    --background: 210 40% 97%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
+    --muted: 210 40% 95%;
     --muted-foreground: 215 16% 47%;
     --primary: 217 91% 60%;
     --primary-foreground: 210 40% 98%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
     --border: 214 32% 91%;
-    --radius: 0.75rem;
+    --radius: 1rem;
   }
 
   * {

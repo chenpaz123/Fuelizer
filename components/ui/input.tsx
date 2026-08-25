@@ -6,7 +6,8 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
     <input
       ref={ref}
       className={cn(
-        "flex h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none ring-primary/40 focus-visible:ring-2",
+        // text-base (16px), not text-sm, so iOS Safari doesn't zoom in on focus.
+        "flex h-12 w-full rounded-2xl border border-border/60 bg-muted/40 px-4 text-base outline-none ring-primary/40 focus-visible:ring-2",
         className
       )}
       {...props}

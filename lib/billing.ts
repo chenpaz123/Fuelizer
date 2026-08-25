@@ -130,7 +130,7 @@ function addMonthsUTC(date: Date, delta: number): Date {
 }
 
 function monthLabel(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(
+  return new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric", timeZone: "UTC" }).format(
     date
   );
 }
