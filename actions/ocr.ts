@@ -12,7 +12,7 @@ const TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions";
 // TOGETHER_VISION_MODEL in Vercel's project env vars to whatever your
 // account's Together dashboard (Models -> filter: Vision, Serverless)
 // currently shows as serverless, then redeploy/restart.
-const VISION_MODEL = process.env.TOGETHER_VISION_MODEL || "Qwen/Qwen3.5-9B";
+const VISION_MODEL = process.env.TOGETHER_VISION_MODEL || "google/gemma-4-31B-it";
 const REQUEST_TIMEOUT_MS = 30_000;
 
 const SYSTEM_PROMPT = `You are a strict OCR/data-extraction engine for a car fuel-tracking app. You will be shown a photo that is EITHER a gas station receipt (often printed in Hebrew), OR a photo of a car's dashboard/trip computer, OR both in one frame.
