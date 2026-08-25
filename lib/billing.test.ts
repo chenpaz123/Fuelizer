@@ -2,16 +2,22 @@ import { describe, expect, it } from "vitest";
 import { calculateNetCost, calculateUpcomingBill, type FuelTransaction } from "@/lib/billing";
 
 describe("calculateNetCost", () => {
-  it("applies the Pazomat discount per pumped liter", () => {
+  it("applies the given Pazomat discount per pumped liter", () => {
     expect(
-      calculateNetCost({ paymentMethod: "Pazomat", pumpedLiters: 20, fullPricePaid: 140 })
+      calculateNetCost({ paymentMethod: "Pazomat", pumpedLiters: 20, fullPricePaid: 140 }, 0.58)
     ).toBeCloseTo(140 - 0.58 * 20, 2);
   });
 
-  it("charges Credit Card transactions in full", () => {
+  it("charges Credit Card transactions in full regardless of the discount rate", () => {
     expect(
-      calculateNetCost({ paymentMethod: "Credit Card", pumpedLiters: 20, fullPricePaid: 140 })
+      calculateNetCost({ paymentMethod: "Credit Card", pumpedLiters: 20, fullPricePaid: 140 }, 0.58)
     ).toBe(140);
+  });
+
+  it("uses a different user's own discount rate, not a hardcoded one", () => {
+    expect(
+      calculateNetCost({ paymentMethod: "Pazomat", pumpedLiters: 20, fullPricePaid: 140 }, 0.75)
+    ).toBeCloseTo(140 - 0.75 * 20, 2);
   });
 });
 
@@ -26,7 +32,7 @@ describe("calculateUpcomingBill", () => {
   ];
 
   it("bills exactly the Pazomat transactions from two months prior", () => {
-    const result = calculateUpcomingBill(transactions, new Date(Date.UTC(2026, 7, 25))); // August 2026
+    const result = calculateUpcomingBill(transactions, 0.58, new Date(Date.UTC(2026, 7, 25))); // August 2026
 
     expect(result.sourceMonth).toMatchObject({ year: 2026, month: 6 });
     expect(result.billingMonth).toMatchObject({ year: 2026, month: 8 });
@@ -36,18 +42,24 @@ describe("calculateUpcomingBill", () => {
     expect(result.totalNetCost).toBeCloseTo(140 - 0.58 * 20 + (105 - 0.58 * 15), 2);
   });
 
+  it("uses the given discount rate rather than a hardcoded one", () => {
+    const result = calculateUpcomingBill(transactions, 0.75, new Date(Date.UTC(2026, 7, 25)));
+
+    expect(result.totalNetCost).toBeCloseTo(140 - 0.75 * 20 + (105 - 0.75 * 15), 2);
+  });
+
   it("rolls over the year boundary correctly (Jan bill -> prior Nov)", () => {
     const janTransactions: FuelTransaction[] = [
       { id: "5", entryDate: "2025-11-15", pumpedLiters: 25, fullPricePaid: 175, paymentMethod: "Pazomat" },
     ];
-    const result = calculateUpcomingBill(janTransactions, new Date(Date.UTC(2026, 0, 10))); // January 2026
+    const result = calculateUpcomingBill(janTransactions, 0.58, new Date(Date.UTC(2026, 0, 10))); // January 2026
 
     expect(result.sourceMonth).toMatchObject({ year: 2025, month: 11 });
     expect(result.transactionCount).toBe(1);
   });
 
   it("returns an empty, zeroed result when nothing matches", () => {
-    const result = calculateUpcomingBill([], new Date(Date.UTC(2026, 7, 25)));
+    const result = calculateUpcomingBill([], 0.58, new Date(Date.UTC(2026, 7, 25)));
 
     expect(result.transactionCount).toBe(0);
     expect(result.totalNetCost).toBe(0);

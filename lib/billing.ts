@@ -1,8 +1,5 @@
 import type { PaymentMethod } from "@/lib/types";
 
-/** Company discount applied per pumped liter when paying via "Pazomat". */
-export const PAZOMAT_DISCOUNT_PER_LITER_ILS = 0.58;
-
 /** Fuel is billed exactly this many months after it was pumped. */
 export const BILLING_DELAY_MONTHS = 2;
 
@@ -36,14 +33,18 @@ export interface UpcomingBillResult {
 
 /**
  * Net cost after the Pazomat discount. Credit Card transactions are charged in full.
+ *
+ * `pazomatDiscountPerLiter` is that user's actual rate from `user_settings`
+ * (fall back to `DEFAULT_PAZOMAT_DISCOUNT_PER_LITER` from lib/settings.ts at
+ * the call site if they haven't saved one) — never hardcode it here, so a
+ * user's own discount always drives their own numbers.
  */
 export function calculateNetCost(
-  transaction: Pick<FuelTransaction, "paymentMethod" | "pumpedLiters" | "fullPricePaid">
+  transaction: Pick<FuelTransaction, "paymentMethod" | "pumpedLiters" | "fullPricePaid">,
+  pazomatDiscountPerLiter: number
 ): number {
   if (transaction.paymentMethod === "Pazomat") {
-    return round2(
-      transaction.fullPricePaid - PAZOMAT_DISCOUNT_PER_LITER_ILS * transaction.pumpedLiters
-    );
+    return round2(transaction.fullPricePaid - pazomatDiscountPerLiter * transaction.pumpedLiters);
   }
   return round2(transaction.fullPricePaid);
 }
@@ -55,9 +56,12 @@ export function calculateNetCost(
  *
  * Credit Card transactions never appear here — they're settled at the pump, not
  * billed later — but are left in the caller's data untouched.
+ *
+ * `pazomatDiscountPerLiter` — see calculateNetCost's doc comment.
  */
 export function calculateUpcomingBill(
   transactions: FuelTransaction[],
+  pazomatDiscountPerLiter: number,
   referenceDate: Date = new Date()
 ): UpcomingBillResult {
   const billingMonthStart = startOfMonthUTC(referenceDate);
@@ -74,7 +78,7 @@ export function calculateUpcomingBill(
       (a, b) => parseCalendarDate(a.entryDate).getTime() - parseCalendarDate(b.entryDate).getTime()
     )
     .map((t) => {
-      const netCost = calculateNetCost(t);
+      const netCost = calculateNetCost(t, pazomatDiscountPerLiter);
       return {
         ...t,
         netCost,

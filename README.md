@@ -82,14 +82,20 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   `entry_date` falls exactly two calendar months before the current month
   (fuel pumped in June is billed in August).
 
-Net Cost and True Reserve are now snapshotted per-row from the user's
-*actual* settings at fill-up time, which resolves half of the old
-three-places duplication problem. What's still open: `lib/billing.ts`'s
-`calculateUpcomingBill`/`calculateNetCost` — used by the Dashboard's
-Upcoming Bill widget, which recomputes Net Cost from raw transactions
-rather than reading the snapshotted `fuel_cycles.net_cost_ils` — still use
-the hardcoded `PAZOMAT_DISCOUNT_PER_LITER_ILS` constant instead of that
-user's live `user_settings.pazomat_discount_per_liter`. See Next steps.
+Net Cost and True Reserve are snapshotted per-row from the user's *actual*
+settings at fill-up time (`app/lab/actions.ts`), and the Dashboard's
+Upcoming Bill widget now reads that same live rate too: `lib/billing.ts` no
+longer hardcodes a discount at all — `calculateNetCost` and
+`calculateUpcomingBill` take `pazomatDiscountPerLiter` as a parameter, and
+`app/dashboard/page.tsx` fetches it from that user's `user_settings` row
+(falling back to `DEFAULT_PAZOMAT_DISCOUNT_PER_LITER` from
+`lib/settings.ts` if they haven't saved one) before calling either
+function. `app/lab/actions.ts` calls the same `calculateNetCost` rather
+than duplicating the formula, so the Pazomat-only-discount rule now lives
+in exactly one place. `DEFAULT_PAZOMAT_DISCOUNT_PER_LITER` /
+`DEFAULT_TANK_CAPACITY_LITERS` in `lib/settings.ts` remain the single
+source of truth for the fallback values shown before a user has ever saved
+`/settings`.
 
 ## Local setup
 
@@ -341,16 +347,6 @@ have it, matching this checklist:
 
 ## Next steps
 
-- **Wire `user_settings` into `lib/billing.ts`** — `fuel_cycles.true_reserve_liters`
-  and `.net_cost_ils` are already computed per-row from live
-  `user_settings` (see `app/lab/actions.ts` /
-  `0006_decouple_calculations.sql`), but the Dashboard's Upcoming Bill
-  widget still calls `lib/billing.ts`'s `calculateUpcomingBill`/
-  `calculateNetCost`, which recompute Net Cost from raw transactions using
-  the hardcoded `PAZOMAT_DISCOUNT_PER_LITER_ILS` constant rather than
-  either that user's saved discount or the already-snapshotted
-  `fuel_cycles.net_cost_ils`. Simplest fix is probably to have the widget
-  just sum the snapshotted `net_cost_ils` column instead of recomputing it.
 - Add a car-computer-vs-pump-truth delta stat and a liters-per-100km toggle
   next to the existing km/L chart.
 - Consider a `vehicles` table if you ever track more than one car.

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { calculateUpcomingBill, type FuelTransaction } from "@/lib/billing";
+import { DEFAULT_PAZOMAT_DISCOUNT_PER_LITER } from "@/lib/settings";
 import { UpcomingBillCard } from "@/components/dashboard/upcoming-bill-card";
 import { CycleStatusCard } from "@/components/dashboard/cycle-status-card";
 import { ConsumptionChart } from "@/components/dashboard/consumption-chart";
@@ -14,14 +15,25 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data, error } = await supabase
-    .from("fuel_cycles")
-    .select("*")
-    .order("entry_date", { ascending: true });
+  const [{ data, error }, { data: settings }] = await Promise.all([
+    supabase.from("fuel_cycles").select("*").order("entry_date", { ascending: true }),
+    // tank_capacity_liters isn't selected here: nothing on this page
+    // recomputes True Reserve — it's already snapshotted per-row in
+    // fuel_cycles.true_reserve_liters at insert time (app/lab/actions.ts),
+    // so the Dashboard just displays that stored value directly.
+    supabase
+      .from("user_settings")
+      .select("pazomat_discount_per_liter")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
 
   if (error) {
     return <p className="text-sm text-destructive">טעינת נתוני התדלוקים נכשלה: {error.message}</p>;
   }
+
+  const pazomatDiscountPerLiter =
+    settings?.pazomat_discount_per_liter ?? DEFAULT_PAZOMAT_DISCOUNT_PER_LITER;
 
   const cycles = (data ?? []) as FuelCycle[];
   const latest = cycles.at(-1);
@@ -34,7 +46,7 @@ export default async function DashboardPage() {
     paymentMethod: c.payment_method,
   }));
 
-  const upcomingBill = calculateUpcomingBill(transactions);
+  const upcomingBill = calculateUpcomingBill(transactions, pazomatDiscountPerLiter);
 
   return (
     <div className="space-y-5">
