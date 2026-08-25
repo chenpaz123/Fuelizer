@@ -18,7 +18,9 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   Computer-vs-Pump-Truth consumption chart.
 - `app/lab` — manual telemetry entry form (a server action inserts into
   `fuel_cycles`).
-- `app/login` — Supabase magic-link auth.
+- `app/login` — "Sign in with Google" (Supabase OAuth).
+- `app/auth/callback` — exchanges the Google OAuth code for a session and
+  redirects to `/dashboard`.
 
 ## Business logic recap
 
@@ -76,14 +78,70 @@ from one place, since this is a single fixed vehicle.
    npm run dev
    ```
 
-   Visit `http://localhost:3000`, sign in via the magic link sent to your
-   email, then log a fill-up at `/lab` and check `/dashboard`.
+   Visit `http://localhost:3000`, sign in with Google (see setup below),
+   then log a fill-up at `/lab` and check `/dashboard`.
 
 6. **Run the billing logic tests**
 
    ```bash
    npm test
    ```
+
+## Google OAuth setup
+
+The Supabase Auth server is the OAuth client as far as Google is concerned —
+Google redirects back to **Supabase**, not to Next.js, so the redirect URI
+you register in Google Cloud is your Supabase project's URL, not Vercel's or
+`localhost`.
+
+**1. Google Cloud Console — OAuth consent screen**
+
+- [console.cloud.google.com](https://console.cloud.google.com) → select/create a project.
+- APIs & Services → OAuth consent screen → User Type **External** → Create.
+- Fill in app name, support email, developer contact email.
+- Scopes: the defaults (`userinfo.email`, `userinfo.profile`, `openid`) are enough — don't add more.
+- Add your own Google account under **Test users** if the app is left in "Testing" mode (fine for development; publish to production when you're ready for any Google account to sign in).
+
+**2. Google Cloud Console — Credentials**
+
+- APIs & Services → Credentials → Create Credentials → **OAuth client ID**.
+- Application type: **Web application**.
+- **Authorized redirect URIs** — add exactly:
+
+  ```
+  https://<your-project-ref>.supabase.co/auth/v1/callback
+  ```
+
+  For this project that's:
+
+  ```
+  https://laspuwihkuhdketnanvs.supabase.co/auth/v1/callback
+  ```
+
+  This is fixed and always ends in `/auth/v1/callback` — it is **not** your
+  app's `/auth/callback` route (that's a separate, later hop that never
+  touches Google directly). Don't add `localhost` or your Vercel URL here;
+  Supabase is the only thing Google ever redirects to.
+- Save, then copy the generated **Client ID** and **Client Secret**.
+
+**3. Supabase Dashboard**
+
+- Your project → Authentication → Sign In / Providers → **Google** → enable it.
+- Paste the **Client ID** and **Client Secret** from step 2, then Save.
+- Authentication → URL Configuration:
+  - **Site URL**: your production URL (e.g. `https://fuelizer.vercel.app`).
+  - **Redirect URLs**: add `https://fuelizer.vercel.app/**` (and
+    `http://localhost:3000/**` for local dev) so Supabase is allowed to send
+    the browser back to `/auth/callback` on each of those origins.
+
+**4. Local development only**
+
+If you're running the Supabase CLI locally (`supabase start`), the local
+Auth server proxies Google OAuth itself and needs the same Client ID/Secret
+as env vars — see `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` /
+`_SECRET` in `.env.example` and `[auth.external.google]` in
+`supabase/config.toml`. Hosted Supabase projects don't need these env vars —
+the credentials live in the dashboard (step 3).
 
 ## Deploying
 
@@ -95,8 +153,9 @@ from one place, since this is a single fixed vehicle.
   `Your project's URL and Key are required to create a Supabase client!`
   on every request and every route 500s — Vercel doesn't read
   `.env.example`/`.env.local`, so this step doesn't happen automatically.
-- Add your Vercel deployment URL to Supabase Auth → URL Configuration
-  (Site URL + Redirect URLs) so magic links work in production.
+- Make sure Supabase Auth → URL Configuration has your Vercel URL in Site
+  URL and Redirect URLs (see the Google OAuth setup above) — otherwise
+  `/auth/callback` gets rejected after the Google redirect.
 - After setting the env vars, redeploy (or just retry — Vercel picks up new
   env vars on the next build/deployment, not on already-running ones).
 

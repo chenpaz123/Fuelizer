@@ -1,48 +1,68 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { GoogleIcon } from "@/components/icons/google-icon";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sent" | "error">("idle");
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(
+    searchParams.get("error") ? "Sign-in failed. Please try again." : null
+  );
+
+  async function handleGoogleSignIn() {
+    setIsLoading(true);
+    setError(null);
+
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        queryParams: { prompt: "select_account" },
+      },
     });
-    setStatus(error ? "error" : "sent");
+
+    if (error) {
+      setError(error.message);
+      setIsLoading(false);
+    }
+    // On success, Supabase navigates the browser to Google — nothing else to do here.
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto max-w-sm space-y-4">
-      <h1 className="text-xl font-semibold">Sign in</h1>
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-        />
+    <div className="mx-auto flex max-w-sm flex-col items-center gap-6 py-16 text-center">
+      <div className="space-y-1">
+        <h1 className="text-xl font-semibold">Sign in to Fuelizer</h1>
+        <p className="text-sm text-muted-foreground">
+          Track fill-ups, telemetry, and billing for your Kia Picanto.
+        </p>
       </div>
-      <Button type="submit" className="w-full">
-        Send magic link
+
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        className="w-full"
+        onClick={handleGoogleSignIn}
+        disabled={isLoading}
+      >
+        <GoogleIcon className="h-4 w-4" />
+        {isLoading ? "Redirecting…" : "Sign in with Google"}
       </Button>
-      {status === "sent" && (
-        <p className="text-sm text-muted-foreground">Check your inbox for a sign-in link.</p>
-      )}
-      {status === "error" && (
-        <p className="text-sm text-destructive">Something went wrong. Try again.</p>
-      )}
-    </form>
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </div>
   );
 }
