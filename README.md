@@ -16,8 +16,10 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   `lib/billing.test.ts`.
 - `app/dashboard` — Upcoming Bill widget, Current Cycle Status, and a
   Computer-vs-Pump-Truth consumption chart.
-- `app/lab` — manual telemetry entry form (a server action inserts into
-  `fuel_cycles`).
+- `app/lab` — camera-first fill-up entry: `components/lab/receipt-scanner.tsx`
+  photographs a receipt/dashboard, uploads it to Storage, and calls
+  `actions/ocr.ts` (a Together AI vision model) to auto-fill an editable
+  confirmation card before a server action inserts into `fuel_cycles`.
 - `app/login` — "Sign in with Google" (Supabase OAuth).
 - `app/auth/callback` — exchanges the Google OAuth code for a session and
   redirects to `/dashboard`.
@@ -143,15 +145,33 @@ as env vars — see `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` /
 `supabase/config.toml`. Hosted Supabase projects don't need these env vars —
 the credentials live in the dashboard (step 3).
 
+## Receipt OCR setup
+
+The Lab route sends a downscaled photo to a vision-language model (`Qwen/Qwen2.5-VL-72B-Instruct`
+via [Together AI](https://together.ai), OpenAI-compatible and priced by the
+token) to auto-fill the fill-up form. This runs entirely server-side in
+`actions/ocr.ts`, so the API key never reaches the browser.
+
+- Create a Together AI account and API key at
+  [api.together.ai/settings/api-keys](https://api.together.ai/settings/api-keys).
+- Add `TOGETHER_API_KEY` to `.env.local` for local dev, and as a Vercel
+  project environment variable for production (see Deploying below).
+- No Supabase-side configuration needed — the OCR call and the Storage
+  upload are independent; if the model call fails, the photo you already
+  took is still uploaded, and the confirmation card just opens blank for
+  manual entry instead of failing the whole flow.
+
 ## Deploying
 
 - Push this repo to GitHub and import it into [Vercel](https://vercel.com).
-- **Required**: add `NEXT_PUBLIC_SUPABASE_URL` and
-  `NEXT_PUBLIC_SUPABASE_ANON_KEY` as Vercel project environment variables
-  (Project Settings → Environment Variables, for the Production
-  environment at minimum). Without these the app throws
+- **Required**: add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  and `TOGETHER_API_KEY` as Vercel project environment variables (Project
+  Settings → Environment Variables, for the Production environment at
+  minimum). Without the first two the app throws
   `Your project's URL and Key are required to create a Supabase client!`
-  on every request and every route 500s — Vercel doesn't read
+  on every request and every route 500s; without `TOGETHER_API_KEY` the
+  Lab's photo scan still uploads the receipt but OCR fails and the
+  confirmation card opens blank. Vercel doesn't read
   `.env.example`/`.env.local`, so this step doesn't happen automatically.
 - Make sure Supabase Auth → URL Configuration has your Vercel URL in Site
   URL and Redirect URLs (see the Google OAuth setup above) — otherwise
@@ -161,9 +181,6 @@ the credentials live in the dashboard (step 3).
 
 ## Next steps
 
-- Wire up receipt photo upload to the `receipts` Storage bucket from the Lab
-  form (path convention: `<user_id>/<entry_date>.jpg`), as a stepping stone
-  toward OCR auto-fill.
 - Add a car-computer-vs-pump-truth delta stat and a liters-per-100km toggle
   next to the existing km/L chart.
 - Consider a `vehicles` table if you ever track more than one car — right

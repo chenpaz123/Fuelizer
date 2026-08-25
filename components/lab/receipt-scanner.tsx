@@ -2,8 +2,10 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
+import { Camera, CheckCircle2, Loader2, RotateCcw, TriangleAlert } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { resizeImageToJpeg } from "@/lib/image";
+import { extractReceiptData, type ReceiptExtraction } from "@/actions/ocr";
 import { createFuelCycle } from "@/app/lab/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,9 +20,18 @@ type DraftFields = {
   entry_date: string;
   total_odometer_km: string;
   trip_distance_km: string;
+  engine_time: string;
+  computer_avg_consumption_kml: string;
   pumped_liters: string;
   full_price_paid: string;
   payment_method: PaymentMethod;
+};
+
+const REQUIRED_FIELD_LABELS: Partial<Record<keyof DraftFields, string>> = {
+  total_odometer_km: "קילומטראז' כולל",
+  trip_distance_km: "מרחק נסיעה",
+  pumped_liters: "ליטרים שנשאבו",
+  full_price_paid: "סכום ששולם",
 };
 
 export function ReceiptScanner({
@@ -35,6 +46,7 @@ export function ReceiptScanner({
 
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [extractionFailed, setExtractionFailed] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [receiptPath, setReceiptPath] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftFields | null>(null);
@@ -45,29 +57,49 @@ export function ReceiptScanner({
     if (!file) return;
 
     setError(null);
-    setPreviewUrl(URL.createObjectURL(file));
+    setExtractionFailed(false);
     setStatus("uploading");
+
+    let blob: Blob;
+    let base64: string;
+    try {
+      const resized = await resizeImageToJpeg(file);
+      blob = resized.blob;
+      base64 = resized.base64;
+    } catch (err) {
+      console.error("Resizing the photo failed:", err);
+      setError("עיבוד התמונה נכשל. נסו שוב.");
+      setStatus("idle");
+      return;
+    }
+
+    setPreviewUrl(URL.createObjectURL(blob));
 
     try {
       const supabase = createClient();
-      const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${userId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+      const path = `${userId}/${Date.now()}-${crypto.randomUUID()}.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("receipts")
-        .upload(path, file, { contentType: file.type || "image/jpeg" });
+        .upload(path, blob, { contentType: "image/jpeg" });
       if (uploadError) throw uploadError;
 
       setReceiptPath(path);
       setStatus("extracting");
 
-      // Mocked OCR — a real implementation would call a vision/receipt-parsing
-      // service here using the uploaded `path`. The upload above is real.
-      await new Promise((resolve) => setTimeout(resolve, 1400));
-      setDraft(mockExtraction(lastOdometerKm));
+      try {
+        const extraction = await extractReceiptData(base64);
+        setDraft(draftFromExtraction(extraction, lastOdometerKm));
+      } catch (err) {
+        // The photo is already safely uploaded — don't throw it away just
+        // because auto-fill failed. Drop into review with a blank, fully
+        // editable form instead.
+        console.error("Receipt extraction failed:", err);
+        setExtractionFailed(true);
+        setDraft(emptyDraft());
+      }
       setStatus("review");
     } catch (err) {
-      // Never surface the raw (English) error text to the user.
       console.error("Receipt upload failed:", err);
       setError("העלאת הקבלה נכשלה. בדקו את החיבור לאינטרנט ונסו שוב.");
       setStatus("idle");
@@ -85,10 +117,18 @@ export function ReceiptScanner({
     setPreviewUrl(null);
     setReceiptPath(null);
     setError(null);
+    setExtractionFailed(false);
   }
 
   async function handleSave() {
     if (!draft) return;
+
+    const validationError = validateDraft(draft);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setStatus("saving");
     setError(null);
 
@@ -97,6 +137,10 @@ export function ReceiptScanner({
         entry_date: draft.entry_date,
         total_odometer_km: Number(draft.total_odometer_km),
         trip_distance_km: Number(draft.trip_distance_km),
+        engine_time: draft.engine_time.trim() || null,
+        computer_avg_consumption_kml: draft.computer_avg_consumption_kml.trim()
+          ? Number(draft.computer_avg_consumption_kml)
+          : null,
         pumped_liters: Number(draft.pumped_liters),
         full_price_paid: Number(draft.full_price_paid),
         payment_method: draft.payment_method,
@@ -134,7 +178,7 @@ export function ReceiptScanner({
             <div className="space-y-1">
               <p className="font-semibold">צלמו את קבלת התדלוק</p>
               <p className="text-sm text-muted-foreground">
-                נזהה אוטומטית את הליטרים, המחיר והתאריך מהקבלה
+                נזהה אוטומטית את הליטרים, המחיר והנתונים מהקבלה או ממחשב הרכב
               </p>
             </div>
             <Button size="lg" className="w-full" onClick={() => fileInputRef.current?.click()}>
@@ -173,9 +217,17 @@ export function ReceiptScanner({
                 className="mx-auto h-28 w-28 rounded-2xl object-cover shadow-md"
               />
             )}
-            <p className="text-center text-sm text-muted-foreground">
-              בדקו שהנתונים נכונים ותקנו במידת הצורך
-            </p>
+
+            {extractionFailed ? (
+              <p className="flex items-center justify-center gap-2 text-center text-sm text-amber-600">
+                <TriangleAlert className="h-4 w-4 shrink-0" />
+                לא הצלחנו לזהות את הנתונים אוטומטית — מלאו את הפרטים ידנית
+              </p>
+            ) : (
+              <p className="text-center text-sm text-muted-foreground">
+                בדקו שהנתונים נכונים ותקנו במידת הצורך
+              </p>
+            )}
 
             <Field
               id="entry_date"
@@ -199,6 +251,22 @@ export function ReceiptScanner({
               inputMode="decimal"
               value={draft.trip_distance_km}
               onChange={(v) => updateDraft("trip_distance_km", v)}
+            />
+            <Field
+              id="engine_time"
+              label="זמן פעולת מנוע"
+              type="text"
+              placeholder="01:23:00"
+              value={draft.engine_time}
+              onChange={(v) => updateDraft("engine_time", v)}
+            />
+            <Field
+              id="computer_avg_consumption_kml"
+              label="צריכה ממוצעת (מחשב הרכב)"
+              type="number"
+              inputMode="decimal"
+              value={draft.computer_avg_consumption_kml}
+              onChange={(v) => updateDraft("computer_avg_consumption_kml", v)}
             />
             <Field
               id="pumped_liters"
@@ -266,25 +334,53 @@ export function ReceiptScanner({
   );
 }
 
-/**
- * Mocks a receipt-OCR result. Trip distance / liters / price are randomized
- * within realistic Picanto-tank ranges; the total odometer is seeded off the
- * last logged cycle so the numbers stay internally consistent.
- */
-function mockExtraction(lastOdometerKm: number | null): DraftFields {
-  const tripDistanceKm = Math.round(280 + Math.random() * 140); // ~280–420 ק"מ
-  const pumpedLiters = Number((28 + Math.random() * 6).toFixed(2)); // ~28–34 ליטר
-  const pricePerLiter = 6.5 + Math.random() * 0.7; // ~6.5–7.2 ₪/ליטר
-  const baseOdometer = lastOdometerKm ?? 0;
-
+function draftFromExtraction(extraction: ReceiptExtraction, lastOdometerKm: number | null): DraftFields {
   return {
     entry_date: new Date().toISOString().slice(0, 10),
-    total_odometer_km: String(baseOdometer + tripDistanceKm),
-    trip_distance_km: String(tripDistanceKm),
-    pumped_liters: String(pumpedLiters),
-    full_price_paid: (pumpedLiters * pricePerLiter).toFixed(2),
+    total_odometer_km: numberOrFallback(extraction.totalOdometer, lastOdometerKm),
+    trip_distance_km: numberOrEmpty(extraction.tripDistance),
+    engine_time: extraction.engineTime ?? "",
+    computer_avg_consumption_kml: numberOrEmpty(extraction.computerAvgConsumption),
+    pumped_liters: numberOrEmpty(extraction.pumpedLiters),
+    full_price_paid: numberOrEmpty(extraction.fullPricePaid),
     payment_method: "Credit Card",
   };
+}
+
+function emptyDraft(): DraftFields {
+  return {
+    entry_date: new Date().toISOString().slice(0, 10),
+    total_odometer_km: "",
+    trip_distance_km: "",
+    engine_time: "",
+    computer_avg_consumption_kml: "",
+    pumped_liters: "",
+    full_price_paid: "",
+    payment_method: "Credit Card",
+  };
+}
+
+function numberOrEmpty(value: number | null): string {
+  return value != null ? String(value) : "";
+}
+
+/** Falls back to the last logged odometer reading if the model didn't find one. */
+function numberOrFallback(value: number | null, fallback: number | null): string {
+  if (value != null) return String(value);
+  return fallback != null ? String(fallback) : "";
+}
+
+function validateDraft(draft: DraftFields): string | null {
+  for (const [key, label] of Object.entries(REQUIRED_FIELD_LABELS) as [
+    keyof DraftFields,
+    string,
+  ][]) {
+    const raw = draft[key];
+    if (typeof raw !== "string" || raw.trim() === "" || !Number.isFinite(Number(raw))) {
+      return `השדה "${label}" חסר או לא תקין`;
+    }
+  }
+  return null;
 }
 
 function ReceiptThumbnail({ src, className }: { src: string; className?: string }) {
