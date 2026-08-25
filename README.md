@@ -7,6 +7,10 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
 
 - `supabase/migrations/0001_init_schema.sql` — the `fuel_cycles` table, RLS
   policies, and the `receipts` Storage bucket.
+- `supabase/migrations/0002_harden_security.sql` — closes a real hole in
+  `v_billing_cycles` (it defaulted to `SECURITY DEFINER`, which bypasses
+  `fuel_cycles`' RLS and would let any signed-in user read everyone's fuel
+  data through the view) and pins the trigger function's `search_path`.
 - `lib/billing.ts` — the 2-month time-shift billing logic and Pazomat
   discount math (`calculateUpcomingBill`, `calculateNetCost`), with tests in
   `lib/billing.test.ts`.
@@ -84,10 +88,17 @@ from one place, since this is a single fixed vehicle.
 ## Deploying
 
 - Push this repo to GitHub and import it into [Vercel](https://vercel.com).
-- Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` as
-  Vercel project environment variables.
+- **Required**: add `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` as Vercel project environment variables
+  (Project Settings → Environment Variables, for the Production
+  environment at minimum). Without these the app throws
+  `Your project's URL and Key are required to create a Supabase client!`
+  on every request and every route 500s — Vercel doesn't read
+  `.env.example`/`.env.local`, so this step doesn't happen automatically.
 - Add your Vercel deployment URL to Supabase Auth → URL Configuration
   (Site URL + Redirect URLs) so magic links work in production.
+- After setting the env vars, redeploy (or just retry — Vercel picks up new
+  env vars on the next build/deployment, not on already-running ones).
 
 ## Next steps
 
