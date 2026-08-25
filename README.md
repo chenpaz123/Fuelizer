@@ -147,9 +147,9 @@ the credentials live in the dashboard (step 3).
 
 ## Receipt OCR setup
 
-The Lab route sends a downscaled photo to a vision-language model (`Qwen/Qwen2.5-VL-72B-Instruct`
-via [Together AI](https://together.ai), OpenAI-compatible and priced by the
-token) to auto-fill the fill-up form. This runs entirely server-side in
+The Lab route sends a downscaled photo to a vision-language model on
+[Together AI](https://together.ai) (OpenAI-compatible, priced by the token)
+to auto-fill the fill-up form. This runs entirely server-side in
 `actions/ocr.ts`, so the API key never reaches the browser.
 
 - Create a Together AI account and API key at
@@ -160,6 +160,22 @@ token) to auto-fill the fill-up form. This runs entirely server-side in
   upload are independent; if the model call fails, the photo you already
   took is still uploaded, and the confirmation card just opens blank for
   manual entry instead of failing the whole flow.
+
+**Which model, and why it might need changing:** Together AI periodically
+moves models between its pay-per-token "serverless" pool and paid
+dedicated-endpoint-only tiers. `actions/ocr.ts` defaults to
+`Qwen/Qwen3.5-9B`, but if OCR starts failing, check the Vercel runtime logs
+for an error like:
+
+```
+Together AI returned an error: 400 { "error": { "code": "model_not_available", "message": "Unable to access non-serverless model ..." } }
+```
+
+That means the current default has moved off the serverless tier. Fix it
+without touching code: open your Together dashboard's
+[Models page](https://api.together.ai/models), filter to Vision +
+Serverless, pick one, and set it as `TOGETHER_VISION_MODEL` in Vercel's
+project environment variables, then redeploy.
 
 ## Deploying
 
