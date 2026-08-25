@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Camera, LayoutDashboard } from "lucide-react";
+import { Camera, History, LayoutDashboard, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/dashboard", label: "דשבורד", icon: LayoutDashboard },
-  { href: "/lab", label: "סריקת קבלה", icon: Camera },
+  { href: "/lab", label: "סריקה", icon: Camera },
+  { href: "/history", label: "היסטוריה", icon: History },
+  { href: "/settings", label: "הגדרות", icon: Settings },
 ] as const;
 
 export function BottomNav() {

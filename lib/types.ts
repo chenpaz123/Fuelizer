@@ -52,6 +52,33 @@ export type FuelCycleInsert = Pick<
     >
   >;
 
+/**
+ * Row shape of `public.user_settings`. Mirrors
+ * supabase/migrations/0004_user_settings.sql. One row per user, upserted
+ * from /settings — see lib/settings.ts for the fallback defaults used
+ * before a user has ever saved one.
+ */
+export type UserSettings = {
+  user_id: string;
+  pazomat_discount_per_liter: number;
+  tank_capacity_liters: number;
+  created_at: string;
+  updated_at: string;
+};
+
+// The settings form always submits both fields together (there's no partial
+// save), and user_id is filled in server-side from the session — so this is
+// exactly what app/settings/actions.ts's upsert needs, no Partial<> needed.
+export type UserSettingsInsert = Pick<
+  UserSettings,
+  "user_id" | "pazomat_discount_per_liter" | "tank_capacity_liters"
+>;
+
+export type UserSettingsInput = Pick<
+  UserSettings,
+  "pazomat_discount_per_liter" | "tank_capacity_liters"
+>;
+
 // Minimal Database type for @supabase/ssr generics.
 // Regenerate with `supabase gen types typescript` once the project is linked.
 export type Database = {
@@ -61,6 +88,12 @@ export type Database = {
         Row: FuelCycle;
         Insert: FuelCycleInsert;
         Update: Partial<FuelCycleInsert>;
+        Relationships: [];
+      };
+      user_settings: {
+        Row: UserSettings;
+        Insert: UserSettingsInsert;
+        Update: Partial<UserSettingsInsert>;
         Relationships: [];
       };
     };

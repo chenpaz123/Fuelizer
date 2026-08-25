@@ -15,6 +15,9 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   `dashboard_image_path`, so the Lab scanner's dashboard photo has a column
   to live in alongside `receipt_image_path` instead of just sitting
   unreferenced in Storage.
+- `supabase/migrations/0004_user_settings.sql` — a `user_settings` table
+  (Pazomat discount, tank capacity) editable from `/settings`. **Not yet
+  wired into the actual calculations** — see Next steps below.
 - `lib/billing.ts` — the 2-month time-shift billing logic and Pazomat
   discount math (`calculateUpcomingBill`, `calculateNetCost`), with tests in
   `lib/billing.test.ts`.
@@ -26,6 +29,13 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   in one request) to auto-fill an editable confirmation card before a
   server action inserts into `fuel_cycles` — receipt and dashboard paths
   both recorded on the row.
+- `app/history` — every fill-up as a card (date, distance/odometer, Pump
+  Truth vs. car computer, net cost, payment method), with tap-to-enlarge
+  receipt/dashboard thumbnails (signed Storage URLs, generated server-side
+  since the bucket is private) and a delete action that also cleans up the
+  Storage objects it referenced.
+- `app/settings` — Pazomat discount / tank capacity form (upserts
+  `user_settings`) and a sign-out button.
 - `app/login` — "Sign in with Google" (Supabase OAuth).
 - `app/auth/callback` — exchanges the Google OAuth code for a session and
   redirects to `/dashboard`.
@@ -42,10 +52,15 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   `entry_date` falls exactly two calendar months before the current month
   (fuel pumped in June is billed in August).
 
-If the tank capacity or discount rate ever changes, update both the SQL
-migration comments/generated columns and the constants at the top of
-`lib/billing.ts` — they're intentionally kept in sync rather than sourced
-from one place, since this is a single fixed vehicle.
+The 35L tank capacity and 0.58 ILS/L discount currently live in **three**
+places that all have to be changed together: `fuel_cycles`' generated
+columns (`true_reserve_liters`, `net_cost_ils`) in the SQL migrations,
+`PAZOMAT_DISCOUNT_PER_LITER_ILS` in `lib/billing.ts`, and now also the
+defaults in `supabase/migrations/0004_user_settings.sql` /
+`lib/settings.ts`. `/settings` lets a user save a *different* value per
+user, but nothing downstream reads it yet — the generated columns and
+`lib/billing.ts` still use the hardcoded constants regardless of what's
+saved there. See Next steps.
 
 ## Local setup
 
@@ -203,7 +218,16 @@ project environment variables, then redeploy.
 
 ## Next steps
 
+- **Wire `user_settings` into the actual calculations** — right now saving
+  a Pazomat discount or tank capacity on `/settings` doesn't change
+  anything else in the app. This needs: `fuel_cycles.true_reserve_liters`
+  and `.net_cost_ils` to stop being hardcoded-constant generated columns
+  (they'd need to become computed in application code, or a Postgres
+  function that looks up `user_settings`, since generated columns can't
+  reference other tables), and `lib/billing.ts`'s
+  `calculateUpcomingBill`/`calculateNetCost` to take the discount as a
+  parameter instead of the `PAZOMAT_DISCOUNT_PER_LITER_ILS` constant. Real
+  schema-shape work, not a quick follow-up.
 - Add a car-computer-vs-pump-truth delta stat and a liters-per-100km toggle
   next to the existing km/L chart.
-- Consider a `vehicles` table if you ever track more than one car — right
-  now the 35 L tank capacity is intentionally hardcoded for the Picanto.
+- Consider a `vehicles` table if you ever track more than one car.
