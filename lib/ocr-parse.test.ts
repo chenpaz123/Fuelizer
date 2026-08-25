@@ -4,13 +4,13 @@ import { parseExtraction } from "@/lib/ocr-parse";
 describe("parseExtraction", () => {
   it("parses a clean JSON object", () => {
     const result = parseExtraction(
-      `{"totalOdometer": 52340, "tripDistance": 373, "engineTime": "05:12:30", "computerAvgConsumption": 17.1, "pumpedLiters": 31.5, "fullPricePaid": 220.96}`
+      `{"totalOdometer": 52340, "tripDistance": 373, "engineTime": "05:12", "computerAvgConsumption": 17.1, "pumpedLiters": 31.5, "fullPricePaid": 220.96}`
     );
 
     expect(result).toEqual({
       totalOdometer: 52340,
       tripDistance: 373,
-      engineTime: "05:12:30",
+      engineTime: "05:12",
       computerAvgConsumption: 17.1,
       pumpedLiters: 31.5,
       fullPricePaid: 220.96,

@@ -2,7 +2,17 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckCircle2, Loader2, RotateCcw, TriangleAlert } from "lucide-react";
+import {
+  Camera,
+  CheckCircle2,
+  Gauge,
+  Loader2,
+  RotateCcw,
+  ScanLine,
+  TriangleAlert,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { resizeImageToJpeg } from "@/lib/image";
 import { extractReceiptData, type ReceiptExtraction } from "@/actions/ocr";
@@ -12,9 +22,25 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type { PaymentMethod } from "@/lib/types";
 
-type Status = "idle" | "uploading" | "extracting" | "review" | "saving" | "done";
+type Status = "idle" | "capturing" | "extracting" | "review" | "saving" | "done";
+
+type SlotKey = "receipt" | "dashboard";
+
+type CapturedImage = {
+  blob: Blob;
+  base64: string;
+  previewUrl: string;
+};
+
+const SLOT_ORDER: SlotKey[] = ["receipt", "dashboard"];
+
+const SLOT_META: Record<SlotKey, { label: string; icon: LucideIcon }> = {
+  receipt: { label: "קבלה", icon: Camera },
+  dashboard: { label: "לוח מחוונים", icon: Gauge },
+};
 
 type DraftFields = {
   entry_date: string;
@@ -42,80 +68,107 @@ export function ReceiptScanner({
   lastOdometerKm: number | null;
 }) {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [status, setStatus] = useState<Status>("idle");
+  const [images, setImages] = useState<Record<SlotKey, CapturedImage | null>>({
+    receipt: null,
+    dashboard: null,
+  });
+  const [processingSlot, setProcessingSlot] = useState<SlotKey | null>(null);
+  const [storagePaths, setStoragePaths] = useState<Partial<Record<SlotKey, string>>>({});
   const [error, setError] = useState<string | null>(null);
   const [extractionFailed, setExtractionFailed] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [receiptPath, setReceiptPath] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftFields | null>(null);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file again later
-    if (!file) return;
+  const hasAnyImage = images.receipt !== null || images.dashboard !== null;
 
+  async function handleCapture(slot: SlotKey, file: File) {
     setError(null);
-    setExtractionFailed(false);
-    setStatus("uploading");
+    setProcessingSlot(slot);
 
-    let blob: Blob;
-    let base64: string;
     try {
-      const resized = await resizeImageToJpeg(file);
-      blob = resized.blob;
-      base64 = resized.base64;
+      const { blob, base64 } = await resizeImageToJpeg(file);
+      const previewUrl = URL.createObjectURL(blob);
+      setImages((prev) => {
+        if (prev[slot]) URL.revokeObjectURL(prev[slot]!.previewUrl); // retake
+        return { ...prev, [slot]: { blob, base64, previewUrl } };
+      });
+      setStatus((prev) => (prev === "idle" ? "capturing" : prev));
     } catch (err) {
       console.error("Resizing the photo failed:", err);
       setError("עיבוד התמונה נכשל. נסו שוב.");
-      setStatus("idle");
-      return;
-    }
-
-    setPreviewUrl(URL.createObjectURL(blob));
-
-    try {
-      const supabase = createClient();
-      const path = `${userId}/${Date.now()}-${crypto.randomUUID()}.jpg`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("receipts")
-        .upload(path, blob, { contentType: "image/jpeg" });
-      if (uploadError) throw uploadError;
-
-      setReceiptPath(path);
-      setStatus("extracting");
-
-      try {
-        const extraction = await extractReceiptData(base64);
-        setDraft(draftFromExtraction(extraction, lastOdometerKm));
-      } catch (err) {
-        // The photo is already safely uploaded — don't throw it away just
-        // because auto-fill failed. Drop into review with a blank, fully
-        // editable form instead.
-        console.error("Receipt extraction failed:", err);
-        setExtractionFailed(true);
-        setDraft(emptyDraft());
-      }
-      setStatus("review");
-    } catch (err) {
-      console.error("Receipt upload failed:", err);
-      setError("העלאת הקבלה נכשלה. בדקו את החיבור לאינטרנט ונסו שוב.");
-      setStatus("idle");
+    } finally {
+      setProcessingSlot(null);
     }
   }
 
-  async function handleCancel() {
-    if (receiptPath) {
+  function handleRemoveImage(slot: SlotKey) {
+    setImages((prev) => {
+      if (prev[slot]) URL.revokeObjectURL(prev[slot]!.previewUrl);
+      return { ...prev, [slot]: null };
+    });
+  }
+
+  async function handleExtract() {
+    const presentSlots = SLOT_ORDER.filter((slot) => images[slot] !== null);
+    if (presentSlots.length === 0) return;
+
+    setError(null);
+    setExtractionFailed(false);
+    setStatus("extracting");
+
+    const uploadedPaths: Partial<Record<SlotKey, string>> = {};
+    try {
       const supabase = createClient();
-      await supabase.storage.from("receipts").remove([receiptPath]);
+      await Promise.all(
+        presentSlots.map(async (slot) => {
+          const image = images[slot]!;
+          const path = `${userId}/${slot}-${Date.now()}-${crypto.randomUUID()}.jpg`;
+          const { error: uploadError } = await supabase.storage
+            .from("receipts")
+            .upload(path, image.blob, { contentType: "image/jpeg" });
+          if (uploadError) throw uploadError;
+          uploadedPaths[slot] = path;
+        })
+      );
+    } catch (err) {
+      console.error("Photo upload failed:", err);
+      setError("העלאת התמונות נכשלה. בדקו את החיבור לאינטרנט ונסו שוב.");
+      setStatus("capturing");
+      return;
     }
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
+
+    setStoragePaths(uploadedPaths);
+
+    try {
+      const orderedBase64 = presentSlots.map((slot) => images[slot]!.base64);
+      const extraction = await extractReceiptData(orderedBase64);
+      setDraft(draftFromExtraction(extraction, lastOdometerKm));
+    } catch (err) {
+      // The photos are already safely uploaded — don't throw them away just
+      // because auto-fill failed. Drop into review with a blank, fully
+      // editable form instead.
+      console.error("Receipt extraction failed:", err);
+      setExtractionFailed(true);
+      setDraft(emptyDraft());
+    }
+    setStatus("review");
+  }
+
+  async function handleCancel() {
+    const uploadedPaths = Object.values(storagePaths).filter((p): p is string => Boolean(p));
+    if (uploadedPaths.length > 0) {
+      const supabase = createClient();
+      await supabase.storage.from("receipts").remove(uploadedPaths);
+    }
+    SLOT_ORDER.forEach((slot) => {
+      if (images[slot]) URL.revokeObjectURL(images[slot]!.previewUrl);
+    });
+
     setStatus("idle");
+    setImages({ receipt: null, dashboard: null });
+    setStoragePaths({});
     setDraft(null);
-    setPreviewUrl(null);
-    setReceiptPath(null);
     setError(null);
     setExtractionFailed(false);
   }
@@ -144,7 +197,7 @@ export function ReceiptScanner({
         pumped_liters: Number(draft.pumped_liters),
         full_price_paid: Number(draft.full_price_paid),
         payment_method: draft.payment_method,
-        receipt_image_path: receiptPath,
+        receipt_image_path: storagePaths.receipt ?? null,
       });
       setStatus("done");
       setTimeout(() => router.push("/dashboard"), 1200);
@@ -159,31 +212,34 @@ export function ReceiptScanner({
     setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
-  if (status === "idle") {
+  if (status === "idle" || status === "capturing") {
     return (
       <div className="space-y-4">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={handleFileChange}
-        />
         <Card>
-          <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
-              <Camera className="h-10 w-10 text-primary" />
-            </div>
-            <div className="space-y-1">
-              <p className="font-semibold">צלמו את קבלת התדלוק</p>
+          <CardContent className="space-y-4 p-5">
+            <div className="space-y-1 text-center">
+              <p className="font-semibold">צלמו את קבלת התדלוק ולוח המחוונים</p>
               <p className="text-sm text-muted-foreground">
-                נזהה אוטומטית את הליטרים, המחיר והנתונים מהקבלה או ממחשב הרכב
+                נזהה אוטומטית את הליטרים, המחיר והנתונים משתי התמונות
               </p>
             </div>
-            <Button size="lg" className="w-full" onClick={() => fileInputRef.current?.click()}>
-              <Camera className="h-5 w-5" />
-              צלם קבלה
+
+            <div className="grid grid-cols-2 gap-3">
+              {SLOT_ORDER.map((slot) => (
+                <CaptureSlot
+                  key={slot}
+                  slot={slot}
+                  image={images[slot]}
+                  isProcessing={processingSlot === slot}
+                  onCapture={(file) => handleCapture(slot, file)}
+                  onRemove={() => handleRemoveImage(slot)}
+                />
+              ))}
+            </div>
+
+            <Button size="lg" className="w-full" onClick={handleExtract} disabled={!hasAnyImage}>
+              <ScanLine className="h-5 w-5" />
+              פענח נתונים
             </Button>
           </CardContent>
         </Card>
@@ -192,15 +248,21 @@ export function ReceiptScanner({
     );
   }
 
-  if (status === "uploading" || status === "extracting") {
+  if (status === "extracting") {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
-          {previewUrl && (
-            <ReceiptThumbnail src={previewUrl} className="h-40 w-40 rounded-2xl object-cover shadow-md" />
-          )}
+          <div className="flex gap-3">
+            {SLOT_ORDER.filter((slot) => images[slot]).map((slot) => (
+              <ReceiptThumbnail
+                key={slot}
+                src={images[slot]!.previewUrl}
+                className="h-20 w-20 rounded-xl object-cover shadow-md"
+              />
+            ))}
+          </div>
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="font-medium">{status === "uploading" ? "מעלה תמונה…" : "מפענח נתונים…"}</p>
+          <p className="font-medium">מפענח נתונים…</p>
         </CardContent>
       </Card>
     );
@@ -211,12 +273,15 @@ export function ReceiptScanner({
       <div className="space-y-4">
         <Card>
           <CardContent className="space-y-4 p-5">
-            {previewUrl && (
-              <ReceiptThumbnail
-                src={previewUrl}
-                className="mx-auto h-28 w-28 rounded-2xl object-cover shadow-md"
-              />
-            )}
+            <div className="flex justify-center gap-3">
+              {SLOT_ORDER.filter((slot) => images[slot]).map((slot) => (
+                <ReceiptThumbnail
+                  key={slot}
+                  src={images[slot]!.previewUrl}
+                  className="h-24 w-24 rounded-2xl object-cover shadow-md"
+                />
+              ))}
+            </div>
 
             {extractionFailed ? (
               <p className="flex items-center justify-center gap-2 text-center text-sm text-amber-600">
@@ -256,7 +321,8 @@ export function ReceiptScanner({
               id="engine_time"
               label="זמן פעולת מנוע"
               type="text"
-              placeholder="01:23:00"
+              placeholder="01:23"
+              maxLength={5}
               value={draft.engine_time}
               onChange={(v) => updateDraft("engine_time", v)}
             />
@@ -334,6 +400,75 @@ export function ReceiptScanner({
   );
 }
 
+function CaptureSlot({
+  slot,
+  image,
+  isProcessing,
+  onCapture,
+  onRemove,
+}: {
+  slot: SlotKey;
+  image: CapturedImage | null;
+  isProcessing: boolean;
+  onCapture: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { label, icon: Icon } = SLOT_META[slot];
+
+  return (
+    <div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = ""; // allow re-selecting the same file again later
+          if (file) onCapture(file);
+        }}
+      />
+
+      {image ? (
+        <div className="relative">
+          <ReceiptThumbnail
+            src={image.previewUrl}
+            className="aspect-square w-full rounded-2xl object-cover shadow-md"
+          />
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`הסר את תמונת ה${label}`}
+            className="absolute -top-2 -end-2 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-md"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <p className="mt-2 text-center text-xs font-medium text-muted-foreground">{label}</p>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={isProcessing}
+          className={cn(
+            "flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-muted/30 px-2 text-center transition-colors",
+            "hover:bg-muted/50 disabled:opacity-50"
+          )}
+        >
+          {isProcessing ? (
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          ) : (
+            <Icon className="h-7 w-7 text-primary" />
+          )}
+          <span className="text-sm font-medium">צלם {label}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 function draftFromExtraction(extraction: ReceiptExtraction, lastOdometerKm: number | null): DraftFields {
   return {
     entry_date: new Date().toISOString().slice(0, 10),
@@ -385,7 +520,7 @@ function validateDraft(draft: DraftFields): string | null {
 
 function ReceiptThumbnail({ src, className }: { src: string; className?: string }) {
   // eslint-disable-next-line @next/next/no-img-element -- local blob: preview URL, not an optimizable remote/static asset
-  return <img src={src} alt="קבלת התדלוק שצולמה" className={className} />;
+  return <img src={src} alt="תמונה שצולמה" className={className} />;
 }
 
 function Field({

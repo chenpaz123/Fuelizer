@@ -15,7 +15,7 @@ const TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions";
 const VISION_MODEL = process.env.TOGETHER_VISION_MODEL || "google/gemma-4-31B-it";
 const REQUEST_TIMEOUT_MS = 30_000;
 
-const SYSTEM_PROMPT = `You are a strict OCR/data-extraction engine for a car fuel-tracking app. You will be shown a photo that is EITHER a gas station receipt (often printed in Hebrew), OR a photo of a car's dashboard/trip computer, OR both in one frame.
+const SYSTEM_PROMPT = `You are a strict OCR/data-extraction engine for a car fuel-tracking app. You will be shown one or two photos: a gas station receipt (often printed in Hebrew) and/or a car's dashboard/trip computer display. They may be provided as a single combined image or as two separate images — read across all of them together as one source of truth.
 
 Return ONLY a single raw JSON object — no markdown code fences, no backticks, no explanation, no text before or after it — with exactly these six keys:
 
@@ -31,24 +31,29 @@ Return ONLY a single raw JSON object — no markdown code fences, no backticks, 
 Field definitions:
 - totalOdometer: the car's total lifetime odometer reading, in kilometers (plain number, e.g. 52340). Comes from the dashboard/trip computer, not the receipt.
 - tripDistance: the distance driven since the trip computer was last reset, in kilometers. Comes from the dashboard/trip computer.
-- engineTime: the trip computer's engine-running time, formatted as "HH:MM:SS" (or "HH:MM" if seconds aren't shown). Comes from the dashboard/trip computer.
+- engineTime: the trip computer's engine-running time, formatted as "HH:MM" only (hours and minutes, no seconds — drop any seconds shown on the display). Comes from the dashboard/trip computer.
 - computerAvgConsumption: the trip computer's own average fuel consumption reading, in kilometers per liter (km/L). Comes from the dashboard/trip computer.
 - pumpedLiters: the quantity of fuel pumped, in liters. Comes from the gas station receipt.
 - fullPricePaid: the total amount paid, in New Israeli Shekels (₪). Comes from the gas station receipt.
 
 Rules:
-- Only extract a value if it is actually visible in the image. If a field is missing, illegible, or you are not reasonably confident, set it to null — never guess or fabricate a number.
+- Only extract a value if it is actually visible in one of the images. If a field is missing, illegible, or you are not reasonably confident, set it to null — never guess or fabricate a number.
 - All numeric fields must be plain JSON numbers: no thousands separators, no units ("km", "L", "₪"), and "." as the decimal separator.
 - Hebrew receipts use standard Arabic numerals (0-9) for digits — read them normally.
 - Output nothing but the JSON object itself.`;
 
 /**
- * Sends a receipt/dashboard photo to a vision-language model and returns the
- * telemetry fields it can read off it. Any field the model can't find (or
- * isn't confident about) comes back as `null` — the caller decides what to
- * do with missing values (e.g. leave the form field blank for the user).
+ * Sends one or more receipt/dashboard photos to a vision-language model and
+ * returns the telemetry fields it can read off them. Any field the model
+ * can't find (or isn't confident about) comes back as `null` — the caller
+ * decides what to do with missing values (e.g. leave the form field blank
+ * for the user).
  */
-export async function extractReceiptData(imageBase64: string): Promise<ReceiptExtraction> {
+export async function extractReceiptData(imagesBase64: string[]): Promise<ReceiptExtraction> {
+  if (imagesBase64.length === 0) {
+    throw new Error("At least one image is required");
+  }
+
   const apiKey = process.env.TOGETHER_API_KEY;
   if (!apiKey) {
     throw new Error("TOGETHER_API_KEY is not configured");
@@ -73,9 +78,12 @@ export async function extractReceiptData(imageBase64: string): Promise<ReceiptEx
             content: [
               {
                 type: "text",
-                text: "Extract the fuel/telemetry data from this image and return the JSON object described in the system prompt.",
+                text: "Extract the fuel/telemetry data from the following image(s) and return the JSON object described in the system prompt.",
               },
-              { type: "image_url", image_url: { url: imageBase64 } },
+              ...imagesBase64.map((url) => ({
+                type: "image_url" as const,
+                image_url: { url },
+              })),
             ],
           },
         ],

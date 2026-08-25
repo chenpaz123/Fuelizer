@@ -16,7 +16,7 @@ export type FuelCycle = {
   entry_date: string; // date, "YYYY-MM-DD"
   total_odometer_km: number;
   trip_distance_km: number;
-  engine_time: string | null; // Postgres interval, e.g. "01:23:00"
+  engine_time: string | null; // Postgres interval, e.g. "01:23" (HH:MM)
   computer_avg_consumption_kml: number | null;
   pumped_liters: number;
   full_price_paid: number;
