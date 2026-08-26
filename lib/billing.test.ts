@@ -43,7 +43,7 @@ describe("calculateUpcomingBill", () => {
   ];
 
   it("bills Pazomat transactions from two months prior", () => {
-    const result = calculateUpcomingBill(transactions, 0.58, referenceDate);
+    const result = calculateUpcomingBill(transactions, 0.58, 2, referenceDate);
 
     expect(result.pazomat.sourceMonth).toMatchObject({ year: 2026, month: 6 });
     expect(result.pazomat.transactionCount).toBe(2);
@@ -53,7 +53,7 @@ describe("calculateUpcomingBill", () => {
   });
 
   it("bills Credit Card transactions from the billing month itself, with no lag", () => {
-    const result = calculateUpcomingBill(transactions, 0.58, referenceDate);
+    const result = calculateUpcomingBill(transactions, 0.58, 2, referenceDate);
 
     expect(result.creditCard.sourceMonth).toMatchObject({ year: 2026, month: 8 });
     expect(result.creditCard.transactionCount).toBe(2);
@@ -64,7 +64,7 @@ describe("calculateUpcomingBill", () => {
   });
 
   it("excludes Pazomat still waiting its lag and Credit Card outside its own cycle", () => {
-    const result = calculateUpcomingBill(transactions, 0.58, referenceDate);
+    const result = calculateUpcomingBill(transactions, 0.58, 2, referenceDate);
     const includedIds = result.transactions.map((t) => t.id);
 
     expect(includedIds).not.toContain("3"); // Pazomat pumped this month, not two months ago
@@ -73,7 +73,7 @@ describe("calculateUpcomingBill", () => {
   });
 
   it("combines both cycles into one total, oldest first", () => {
-    const result = calculateUpcomingBill(transactions, 0.58, referenceDate);
+    const result = calculateUpcomingBill(transactions, 0.58, 2, referenceDate);
 
     expect(result.billingMonth).toMatchObject({ year: 2026, month: 8 });
     expect(result.transactionCount).toBe(4); // 2 Pazomat + 2 Credit Card
@@ -83,7 +83,7 @@ describe("calculateUpcomingBill", () => {
   });
 
   it("applies the discount rate to Pazomat only -- Credit Card is unaffected", () => {
-    const result = calculateUpcomingBill(transactions, 0.75, referenceDate);
+    const result = calculateUpcomingBill(transactions, 0.75, 2, referenceDate);
 
     expect(result.pazomat.totalNetCost).toBeCloseTo(140 - 0.75 * 20 + (105 - 0.75 * 15), 2);
     expect(result.creditCard.totalNetCost).toBeCloseTo(210 + 70, 2);
@@ -93,19 +93,58 @@ describe("calculateUpcomingBill", () => {
     const janTransactions: FuelTransaction[] = [
       { id: "8", entryDate: "2025-11-15", pumpedLiters: 25, fullPricePaid: 175, paymentMethod: "Pazomat" },
     ];
-    const result = calculateUpcomingBill(janTransactions, 0.58, new Date(Date.UTC(2026, 0, 10))); // January 2026
+    const result = calculateUpcomingBill(janTransactions, 0.58, 2, new Date(Date.UTC(2026, 0, 10))); // January 2026
 
     expect(result.pazomat.sourceMonth).toMatchObject({ year: 2025, month: 11 });
     expect(result.pazomat.transactionCount).toBe(1);
   });
 
   it("returns an empty, zeroed result (both breakdowns included) when nothing matches", () => {
-    const result = calculateUpcomingBill([], 0.58, referenceDate);
+    const result = calculateUpcomingBill([], 0.58, 2, referenceDate);
 
     expect(result.transactionCount).toBe(0);
     expect(result.totalNetCost).toBe(0);
     expect(result.totalLiters).toBe(0);
     expect(result.pazomat.transactionCount).toBe(0);
     expect(result.creditCard.transactionCount).toBe(0);
+  });
+
+  describe("configurable pazomatBillingDelayMonths", () => {
+    // A fresh dataset, one Pazomat transaction per month, so each delay
+    // value has an unambiguous single row to find (or not).
+    const monthlyTransactions: FuelTransaction[] = [
+      { id: "may", entryDate: "2026-05-10", pumpedLiters: 20, fullPricePaid: 140, paymentMethod: "Pazomat" },
+      { id: "jun", entryDate: "2026-06-10", pumpedLiters: 20, fullPricePaid: 140, paymentMethod: "Pazomat" },
+      { id: "jul", entryDate: "2026-07-10", pumpedLiters: 20, fullPricePaid: 140, paymentMethod: "Pazomat" },
+      { id: "aug", entryDate: "2026-08-10", pumpedLiters: 20, fullPricePaid: 140, paymentMethod: "Pazomat" },
+    ];
+
+    it("a 1-month delay bills last month's Pazomat fuel", () => {
+      const result = calculateUpcomingBill(monthlyTransactions, 0.58, 1, referenceDate);
+
+      expect(result.pazomat.sourceMonth).toMatchObject({ year: 2026, month: 7 });
+      expect(result.pazomat.transactions.map((t) => t.id)).toEqual(["jul"]);
+    });
+
+    it("a 2-month delay (the old hardcoded default) bills two months back", () => {
+      const result = calculateUpcomingBill(monthlyTransactions, 0.58, 2, referenceDate);
+
+      expect(result.pazomat.sourceMonth).toMatchObject({ year: 2026, month: 6 });
+      expect(result.pazomat.transactions.map((t) => t.id)).toEqual(["jun"]);
+    });
+
+    it("a 3-month delay bills three months back", () => {
+      const result = calculateUpcomingBill(monthlyTransactions, 0.58, 3, referenceDate);
+
+      expect(result.pazomat.sourceMonth).toMatchObject({ year: 2026, month: 5 });
+      expect(result.pazomat.transactions.map((t) => t.id)).toEqual(["may"]);
+    });
+
+    it("a 0-month delay bills Pazomat the same month as Credit Card, with no lag", () => {
+      const result = calculateUpcomingBill(monthlyTransactions, 0.58, 0, referenceDate);
+
+      expect(result.pazomat.sourceMonth).toMatchObject({ year: 2026, month: 8 });
+      expect(result.pazomat.transactions.map((t) => t.id)).toEqual(["aug"]);
+    });
   });
 });

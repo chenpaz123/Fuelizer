@@ -8,3 +8,6 @@
 // supabase/migrations/0006_decouple_calculations.sql.
 export const DEFAULT_PAZOMAT_DISCOUNT_PER_LITER = 0.58;
 export const DEFAULT_TANK_CAPACITY_LITERS = 35;
+// Mirrors user_settings.pazomat_billing_delay_months' column default in
+// supabase/migrations/0007_add_billing_delay.sql.
+export const DEFAULT_PAZOMAT_BILLING_DELAY_MONTHS = 2;

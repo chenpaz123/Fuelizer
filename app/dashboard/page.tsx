@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { calculateUpcomingBill, type FuelTransaction } from "@/lib/billing";
-import { DEFAULT_PAZOMAT_DISCOUNT_PER_LITER } from "@/lib/settings";
+import {
+  DEFAULT_PAZOMAT_BILLING_DELAY_MONTHS,
+  DEFAULT_PAZOMAT_DISCOUNT_PER_LITER,
+} from "@/lib/settings";
 import { UpcomingBillCard } from "@/components/dashboard/upcoming-bill-card";
 import { CycleStatusCard } from "@/components/dashboard/cycle-status-card";
 import { ConsumptionChart } from "@/components/dashboard/consumption-chart";
@@ -23,7 +26,7 @@ export default async function DashboardPage() {
     // so the Dashboard just displays that stored value directly.
     supabase
       .from("user_settings")
-      .select("pazomat_discount_per_liter")
+      .select("pazomat_discount_per_liter, pazomat_billing_delay_months")
       .eq("user_id", user.id)
       .maybeSingle(),
   ]);
@@ -34,6 +37,8 @@ export default async function DashboardPage() {
 
   const pazomatDiscountPerLiter =
     settings?.pazomat_discount_per_liter ?? DEFAULT_PAZOMAT_DISCOUNT_PER_LITER;
+  const pazomatBillingDelayMonths =
+    settings?.pazomat_billing_delay_months ?? DEFAULT_PAZOMAT_BILLING_DELAY_MONTHS;
 
   const cycles = (data ?? []) as FuelCycle[];
   const latest = cycles.at(-1);
@@ -46,7 +51,7 @@ export default async function DashboardPage() {
     paymentMethod: c.payment_method,
   }));
 
-  const upcomingBill = calculateUpcomingBill(transactions, pazomatDiscountPerLiter);
+  const upcomingBill = calculateUpcomingBill(transactions, pazomatDiscountPerLiter, pazomatBillingDelayMonths);
 
   return (
     <div className="space-y-5">

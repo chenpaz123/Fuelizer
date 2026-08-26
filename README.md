@@ -29,8 +29,14 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   they haven't saved one), so a later change to `user_settings` never
   retroactively rewrites a past fill-up's numbers. See Business logic
   recap below.
-- `lib/billing.ts` — the 2-month time-shift billing logic and Pazomat
-  discount math (`calculateUpcomingBill`, `calculateNetCost`), with tests in
+- `supabase/migrations/0007_add_billing_delay.sql` — adds
+  `pazomat_billing_delay_months` (integer, not null, default `2`, checked
+  `>= 0`) to `user_settings`, editable from `/settings`. Lets each user set
+  their own Pazomat billing lag instead of everyone sharing one hardcoded
+  2-month delay. Credit Card has no equivalent column — its 0-month lag is
+  how that payment method settles, not a per-user preference.
+- `lib/billing.ts` — the time-shifted billing logic and Pazomat discount
+  math (`calculateUpcomingBill`, `calculateNetCost`), with tests in
   `lib/billing.test.ts`.
 - `app/dashboard` — Upcoming Bill widget, Current Cycle Status, and a
   Computer-vs-Pump-Truth consumption chart.
@@ -98,12 +104,15 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   (`calculateUpcomingBill`, `UpcomingBillResult.pazomat` /
   `.creditCard` for the per-method breakdown, `.transactions` /
   `.totalNetCost` / `.totalLiters` / `.transactionCount` for both combined).
-  Pazomat has the `BILLING_DELAY_MONTHS` (2-month) lag: an August bill
-  covers Pazomat fuel pumped in June. Credit Card has no lag: an August
-  bill covers Credit Card fuel pumped in August itself, same month as the
-  bill. (Credit Card is still charged in full at the pump, same as ever —
-  this is about which month's transactions the *widget* surfaces as
-  "upcoming," not about re-billing something already paid.)
+  Pazomat lags that user's own
+  `user_settings.pazomat_billing_delay_months` (falls back to
+  `DEFAULT_PAZOMAT_BILLING_DELAY_MONTHS`, 2, if they haven't saved one): at
+  the default, an August bill covers Pazomat fuel pumped in June. Credit
+  Card always has no lag, regardless of that setting: an August bill
+  covers Credit Card fuel pumped in August itself, same month as the bill.
+  (Credit Card is still charged in full at the pump, same as ever — this is
+  about which month's transactions the *widget* surfaces as "upcoming," not
+  about re-billing something already paid.)
 
 Net Cost and True Reserve are snapshotted per-row from the user's *actual*
 settings at fill-up time (`app/lab/actions.ts`), and the Dashboard's

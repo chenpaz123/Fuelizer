@@ -6,7 +6,11 @@ import { SettingsForm } from "@/components/settings/settings-form";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DEFAULT_PAZOMAT_DISCOUNT_PER_LITER, DEFAULT_TANK_CAPACITY_LITERS } from "@/lib/settings";
+import {
+  DEFAULT_PAZOMAT_BILLING_DELAY_MONTHS,
+  DEFAULT_PAZOMAT_DISCOUNT_PER_LITER,
+  DEFAULT_TANK_CAPACITY_LITERS,
+} from "@/lib/settings";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -29,6 +33,9 @@ export default async function SettingsPage() {
       <SettingsForm
         initialPazomatDiscount={settings?.pazomat_discount_per_liter ?? DEFAULT_PAZOMAT_DISCOUNT_PER_LITER}
         initialTankCapacity={settings?.tank_capacity_liters ?? DEFAULT_TANK_CAPACITY_LITERS}
+        initialPazomatBillingDelayMonths={
+          settings?.pazomat_billing_delay_months ?? DEFAULT_PAZOMAT_BILLING_DELAY_MONTHS
+        }
       />
 
       <Card>

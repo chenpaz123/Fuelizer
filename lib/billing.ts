@@ -1,8 +1,5 @@
 import type { PaymentMethod } from "@/lib/types";
 
-/** Pazomat fuel is billed exactly this many months after it was pumped. Credit Card has no lag — see calculateUpcomingBill. */
-export const BILLING_DELAY_MONTHS = 2;
-
 export interface FuelTransaction {
   id: string;
   /** ISO date ("YYYY-MM-DD") or a Date. Treated as a calendar day, not an instant. */
@@ -32,7 +29,7 @@ export interface BillBreakdown {
 export interface UpcomingBillResult {
   /** Calendar month the bill is issued in. */
   billingMonth: { year: number; month: number; label: string };
-  /** Pazomat transactions, pumped BILLING_DELAY_MONTHS before billingMonth. */
+  /** Pazomat transactions, pumped `pazomatBillingDelayMonths` before billingMonth. */
   pazomat: BillBreakdown;
   /** Credit Card transactions, pumped in billingMonth itself -- no lag. */
   creditCard: BillBreakdown;
@@ -65,10 +62,16 @@ export function calculateNetCost(
  * Calculates the "Upcoming Bill" widget for `referenceDate`'s calendar
  * month, combining two different billing cycles per payment method:
  *
- * - **Pazomat** has a `BILLING_DELAY_MONTHS`-month lag: an August bill
- *   covers Pazomat fuel pumped in June.
+ * - **Pazomat** lags `pazomatBillingDelayMonths` months behind: with a
+ *   2-month delay, an August bill covers Pazomat fuel pumped in June.
+ *   That's that user's own `user_settings.pazomat_billing_delay_months`
+ *   (fall back to `DEFAULT_PAZOMAT_BILLING_DELAY_MONTHS` from
+ *   lib/settings.ts at the call site if they haven't saved one) — never
+ *   hardcode it here, same reasoning as `pazomatDiscountPerLiter` below.
  * - **Credit Card** has no lag: an August bill covers Credit Card fuel
- *   pumped in August itself (the same month as `referenceDate`).
+ *   pumped in August itself (the same month as `referenceDate`). This one
+ *   isn't user-configurable — it's how the payment method itself settles,
+ *   not a preference.
  *
  * The combined total is Pazomat's lagged subtotal + Credit Card's
  * current-month subtotal — see `pazomat`/`creditCard` on the result for the
@@ -80,10 +83,11 @@ export function calculateNetCost(
 export function calculateUpcomingBill(
   transactions: FuelTransaction[],
   pazomatDiscountPerLiter: number,
+  pazomatBillingDelayMonths: number,
   referenceDate: Date = new Date()
 ): UpcomingBillResult {
   const billingMonthStart = startOfMonthUTC(referenceDate);
-  const pazomatSourceMonthStart = addMonthsUTC(billingMonthStart, -BILLING_DELAY_MONTHS);
+  const pazomatSourceMonthStart = addMonthsUTC(billingMonthStart, -pazomatBillingDelayMonths);
 
   const pazomat = buildBreakdown(transactions, "Pazomat", pazomatSourceMonthStart, pazomatDiscountPerLiter);
   const creditCard = buildBreakdown(transactions, "Credit Card", billingMonthStart, pazomatDiscountPerLiter);
