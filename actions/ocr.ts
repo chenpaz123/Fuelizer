@@ -70,7 +70,16 @@ export async function extractReceiptData(imagesBase64: string[]): Promise<Receip
       body: JSON.stringify({
         model: VISION_MODEL,
         temperature: 0,
-        max_tokens: 512,
+        // 512 was too tight in practice -- a real response got cut off
+        // one token short of its closing `}` (see lib/ocr-parse.ts's
+        // repairTruncatedJson, added as a second line of defense for
+        // whatever still slips through). The completion is a tiny flat
+        // JSON object and the model stops on its own well before this many
+        // tokens in the normal case, so raising the cap doesn't cost
+        // anything -- it's just headroom for a model whose actual token
+        // usage (e.g. hidden reasoning) doesn't match what the visible
+        // output would suggest.
+        max_tokens: 2048,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {

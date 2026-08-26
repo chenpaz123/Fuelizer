@@ -62,6 +62,34 @@ describe("parseExtraction", () => {
     expect(result.engineTime).toBeNull();
   });
 
+  it("recovers a response truncated right before the closing brace", () => {
+    // The exact real-world failure this guards against: every field came
+    // through complete, but the response was cut off before the final `}`.
+    const result = parseExtraction(
+      '{\n  "totalOdometer": 13724,\n  "tripDistance": 457.4,\n  "engineTime": "10:24",\n  "computerAvgConsumption": 16.9,\n  "pumpedLiters": 29.074,\n  "fullPricePaid": 242.48'
+    );
+
+    expect(result).toEqual({
+      totalOdometer: 13724,
+      tripDistance: 457.4,
+      engineTime: "10:24",
+      computerAvgConsumption: 16.9,
+      pumpedLiters: 29.074,
+      fullPricePaid: 242.48,
+    });
+  });
+
+  it("recovers the fields before a cutoff that lands mid-value", () => {
+    // "10: is an unterminated string -- simply closing the object with `}`
+    // wouldn't produce valid JSON here, so this exercises the more
+    // aggressive "drop back to the last complete field" repair path.
+    const result = parseExtraction('{"totalOdometer": 13724, "tripDistance": 457.4, "engineTime": "10:');
+
+    expect(result.totalOdometer).toBe(13724);
+    expect(result.tripDistance).toBe(457.4);
+    expect(result.engineTime).toBeNull(); // the truncated field itself is dropped, not guessed at
+  });
+
   it("throws on unparseable content", () => {
     expect(() => parseExtraction("not json at all")).toThrow();
   });
