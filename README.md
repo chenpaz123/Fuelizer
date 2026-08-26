@@ -94,9 +94,16 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   found a computer consumption figure, shown with a small "חושב אוטומטית –
   ניתן לערוך" hint, but it's never recomputed server-side and the user can
   freely overwrite it before saving.
-- **Upcoming Bill**: sum of Net Cost for every Pazomat transaction whose
-  `entry_date` falls exactly two calendar months before the current month
-  (fuel pumped in June is billed in August).
+- **Upcoming Bill**: two different billing cycles combined into one figure
+  (`calculateUpcomingBill`, `UpcomingBillResult.pazomat` /
+  `.creditCard` for the per-method breakdown, `.transactions` /
+  `.totalNetCost` / `.totalLiters` / `.transactionCount` for both combined).
+  Pazomat has the `BILLING_DELAY_MONTHS` (2-month) lag: an August bill
+  covers Pazomat fuel pumped in June. Credit Card has no lag: an August
+  bill covers Credit Card fuel pumped in August itself, same month as the
+  bill. (Credit Card is still charged in full at the pump, same as ever —
+  this is about which month's transactions the *widget* surfaces as
+  "upcoming," not about re-billing something already paid.)
 
 Net Cost and True Reserve are snapshotted per-row from the user's *actual*
 settings at fill-up time (`app/lab/actions.ts`), and the Dashboard's

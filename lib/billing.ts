@@ -1,6 +1,6 @@
 import type { PaymentMethod } from "@/lib/types";
 
-/** Fuel is billed exactly this many months after it was pumped. */
+/** Pazomat fuel is billed exactly this many months after it was pumped. Credit Card has no lag — see calculateUpcomingBill. */
 export const BILLING_DELAY_MONTHS = 2;
 
 export interface FuelTransaction {
@@ -19,12 +19,24 @@ export interface BilledTransaction extends FuelTransaction {
   discountApplied: number;
 }
 
-export interface UpcomingBillResult {
-  /** Calendar month the bill is issued in (billingMonth = sourceMonth + 2 months). */
-  billingMonth: { year: number; month: number; label: string };
-  /** Calendar month the fuel was actually pumped in. */
+export interface BillBreakdown {
+  /** Calendar month these transactions were pumped in. */
   sourceMonth: { year: number; month: number; label: string };
-  /** Pazomat transactions from the source month, oldest first. */
+  /** This breakdown's transactions, oldest first. */
+  transactions: BilledTransaction[];
+  totalNetCost: number;
+  totalLiters: number;
+  transactionCount: number;
+}
+
+export interface UpcomingBillResult {
+  /** Calendar month the bill is issued in. */
+  billingMonth: { year: number; month: number; label: string };
+  /** Pazomat transactions, pumped BILLING_DELAY_MONTHS before billingMonth. */
+  pazomat: BillBreakdown;
+  /** Credit Card transactions, pumped in billingMonth itself -- no lag. */
+  creditCard: BillBreakdown;
+  /** pazomat.transactions + creditCard.transactions combined, oldest first. */
   transactions: BilledTransaction[];
   totalNetCost: number;
   totalLiters: number;
@@ -50,12 +62,18 @@ export function calculateNetCost(
 }
 
 /**
- * Calculates the "Upcoming Bill" widget: the total Net Cost of every Pazomat
- * transaction pumped exactly `BILLING_DELAY_MONTHS` months before `referenceDate`'s
- * month (e.g. a bill issued in August covers Pazomat fuel pumped in June).
+ * Calculates the "Upcoming Bill" widget for `referenceDate`'s calendar
+ * month, combining two different billing cycles per payment method:
  *
- * Credit Card transactions never appear here — they're settled at the pump, not
- * billed later — but are left in the caller's data untouched.
+ * - **Pazomat** has a `BILLING_DELAY_MONTHS`-month lag: an August bill
+ *   covers Pazomat fuel pumped in June.
+ * - **Credit Card** has no lag: an August bill covers Credit Card fuel
+ *   pumped in August itself (the same month as `referenceDate`).
+ *
+ * The combined total is Pazomat's lagged subtotal + Credit Card's
+ * current-month subtotal — see `pazomat`/`creditCard` on the result for the
+ * breakdown, and `transactions`/`totalNetCost`/`totalLiters`/
+ * `transactionCount` for the two combined.
  *
  * `pazomatDiscountPerLiter` — see calculateNetCost's doc comment.
  */
@@ -65,14 +83,44 @@ export function calculateUpcomingBill(
   referenceDate: Date = new Date()
 ): UpcomingBillResult {
   const billingMonthStart = startOfMonthUTC(referenceDate);
-  const sourceMonthStart = addMonthsUTC(billingMonthStart, -BILLING_DELAY_MONTHS);
-  const sourceMonthEnd = addMonthsUTC(sourceMonthStart, 1); // exclusive upper bound
+  const pazomatSourceMonthStart = addMonthsUTC(billingMonthStart, -BILLING_DELAY_MONTHS);
+
+  const pazomat = buildBreakdown(transactions, "Pazomat", pazomatSourceMonthStart, pazomatDiscountPerLiter);
+  const creditCard = buildBreakdown(transactions, "Credit Card", billingMonthStart, pazomatDiscountPerLiter);
+
+  const combined = [...pazomat.transactions, ...creditCard.transactions].sort(
+    (a, b) => parseCalendarDate(a.entryDate).getTime() - parseCalendarDate(b.entryDate).getTime()
+  );
+
+  return {
+    billingMonth: {
+      year: billingMonthStart.getUTCFullYear(),
+      month: billingMonthStart.getUTCMonth() + 1,
+      label: monthLabel(billingMonthStart),
+    },
+    pazomat,
+    creditCard,
+    transactions: combined,
+    totalNetCost: round2(pazomat.totalNetCost + creditCard.totalNetCost),
+    totalLiters: round2(pazomat.totalLiters + creditCard.totalLiters),
+    transactionCount: pazomat.transactionCount + creditCard.transactionCount,
+  };
+}
+
+/** Filters `transactions` to one payment method within one calendar month and totals them up. */
+function buildBreakdown(
+  transactions: FuelTransaction[],
+  paymentMethod: PaymentMethod,
+  monthStart: Date,
+  pazomatDiscountPerLiter: number
+): BillBreakdown {
+  const monthEnd = addMonthsUTC(monthStart, 1); // exclusive upper bound
 
   const billed = transactions
-    .filter((t) => t.paymentMethod === "Pazomat")
+    .filter((t) => t.paymentMethod === paymentMethod)
     .filter((t) => {
       const d = parseCalendarDate(t.entryDate);
-      return d >= sourceMonthStart && d < sourceMonthEnd;
+      return d >= monthStart && d < monthEnd;
     })
     .sort(
       (a, b) => parseCalendarDate(a.entryDate).getTime() - parseCalendarDate(b.entryDate).getTime()
@@ -86,23 +134,15 @@ export function calculateUpcomingBill(
       };
     });
 
-  const totalNetCost = round2(billed.reduce((sum, t) => sum + t.netCost, 0));
-  const totalLiters = round2(billed.reduce((sum, t) => sum + t.pumpedLiters, 0));
-
   return {
-    billingMonth: {
-      year: billingMonthStart.getUTCFullYear(),
-      month: billingMonthStart.getUTCMonth() + 1,
-      label: monthLabel(billingMonthStart),
-    },
     sourceMonth: {
-      year: sourceMonthStart.getUTCFullYear(),
-      month: sourceMonthStart.getUTCMonth() + 1,
-      label: monthLabel(sourceMonthStart),
+      year: monthStart.getUTCFullYear(),
+      month: monthStart.getUTCMonth() + 1,
+      label: monthLabel(monthStart),
     },
     transactions: billed,
-    totalNetCost,
-    totalLiters,
+    totalNetCost: round2(billed.reduce((sum, t) => sum + t.netCost, 0)),
+    totalLiters: round2(billed.reduce((sum, t) => sum + t.pumpedLiters, 0)),
     transactionCount: billed.length,
   };
 }
