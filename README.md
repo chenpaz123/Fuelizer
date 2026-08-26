@@ -40,11 +40,19 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   in one request) to auto-fill an editable confirmation card before a
   server action inserts into `fuel_cycles` — receipt and dashboard paths
   both recorded on the row.
-- `app/history` — every fill-up as a card (date, distance/odometer, Pump
-  Truth vs. car computer, net cost, payment method), with tap-to-enlarge
-  receipt/dashboard thumbnails (signed Storage URLs, generated server-side
-  since the bucket is private) and a delete action that also cleans up the
-  Storage objects it referenced.
+- `app/history` — a credit-card-statement-style view
+  (`components/history/monthly-history-view.tsx`, a Client Component):
+  fill-ups grouped by calendar month, a horizontally scrollable month
+  selector (newest month rightmost, matching the RTL layout), a prominent
+  card showing that month's total Net Cost, and each month's fill-ups below
+  as cards (date, distance/odometer, Pump Truth vs. car computer, net cost,
+  payment method), with tap-to-enlarge receipt/dashboard thumbnails (signed
+  Storage URLs, generated server-side since the bucket is private) and a
+  delete action that also cleans up the Storage objects it referenced. The
+  page (`app/history/page.tsx`) does the data fetching and URL-signing;
+  `MonthlyHistoryView` only handles the client-side grouping/selection/
+  rendering, so it stays reusable if fill-ups ever need showing anywhere
+  else.
 - `app/settings` — Pazomat discount / tank capacity form (upserts
   `user_settings`), a light/dark/system theme toggle
   (`components/theme/theme-toggle.tsx`), and a sign-out button.

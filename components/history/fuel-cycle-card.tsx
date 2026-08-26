@@ -10,7 +10,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { FuelCycle } from "@/lib/types";
 
-type ImageInfo = { label: string; signedUrl: string };
+export type ImageInfo = { label: string; signedUrl: string };
 
 export function FuelCycleCard({
   cycle,

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { FuelCycleCard } from "@/components/history/fuel-cycle-card";
+import { MonthlyHistoryView } from "@/components/history/monthly-history-view";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { FuelCycle } from "@/lib/types";
@@ -44,28 +44,7 @@ export default async function HistoryPage() {
         )}
       </div>
 
-      {cycles.length === 0 ? (
-        <p className="text-center text-sm text-muted-foreground">עדיין לא נרשמו תדלוקים.</p>
-      ) : (
-        <div className="space-y-3">
-          {cycles.map((cycle) => (
-            <FuelCycleCard
-              key={cycle.id}
-              cycle={cycle}
-              receiptImage={
-                cycle.receipt_image_path && signedUrlByPath.has(cycle.receipt_image_path)
-                  ? { label: "קבלה", signedUrl: signedUrlByPath.get(cycle.receipt_image_path)! }
-                  : null
-              }
-              dashboardImage={
-                cycle.dashboard_image_path && signedUrlByPath.has(cycle.dashboard_image_path)
-                  ? { label: "לוח מחוונים", signedUrl: signedUrlByPath.get(cycle.dashboard_image_path)! }
-                  : null
-              }
-            />
-          ))}
-        </div>
-      )}
+      <MonthlyHistoryView cycles={cycles} signedUrlByPath={Object.fromEntries(signedUrlByPath)} />
     </div>
   );
 }
