@@ -35,6 +35,12 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   their own Pazomat billing lag instead of everyone sharing one hardcoded
   2-month delay. Credit Card has no equivalent column — its 0-month lag is
   how that payment method settles, not a per-user preference.
+- `supabase/migrations/0008_add_has_pazomat.sql` — adds `has_pazomat`
+  (boolean, not null, default `true`) to `user_settings`: the "Regular
+  Mode" master toggle for a user with no Pazomat/fleet card, editable from
+  `/settings` (`components/ui/switch.tsx`, a new hand-rolled toggle
+  primitive). Defaults to `true` so every existing user is unaffected until
+  they explicitly opt out. See Business logic recap below.
 - `lib/billing.ts` — the time-shifted billing logic and Pazomat discount
   math (`calculateUpcomingBill`, `calculateNetCost`), with tests in
   `lib/billing.test.ts`.
@@ -113,6 +119,22 @@ Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
   (Credit Card is still charged in full at the pump, same as ever — this is
   about which month's transactions the *widget* surfaces as "upcoming," not
   about re-billing something already paid.)
+- **Regular Mode** (`user_settings.has_pazomat`, default `true`): the
+  master toggle for a user with no Pazomat/fleet card. `false` doesn't add
+  new logic so much as it removes a delay: `calculateUpcomingBill`'s
+  `hasPazomat` parameter collapses the Pazomat lag to 0 months regardless
+  of `pazomatBillingDelayMonths`, so any Pazomat-tagged row (stray legacy
+  data — the Lab scanner won't offer that option anymore) is treated like
+  Credit Card, current month, no lag. The result is the same combined
+  `totalNetCost`/`totalLiters`/`transactionCount`/`transactions` shape as
+  always; only the UI changes (`components/dashboard/upcoming-bill-card.tsx`
+  retitles "החיוב הקרוב" to "הוצאות החודש" and skips the now-redundant
+  per-method breakdown lines, since both "cycles" are the same month).
+  `components/settings/settings-form.tsx` hides the discount/delay fields
+  when off, and `components/lab/receipt-scanner.tsx` (via a `hasPazomat`
+  prop from `app/lab/page.tsx`) drops "פזומט" from the payment-method
+  `<Select>` entirely rather than merely defaulting away from it — the
+  default was already Credit Card either way.
 
 Net Cost and True Reserve are snapshotted per-row from the user's *actual*
 settings at fill-up time (`app/lab/actions.ts`), and the Dashboard's

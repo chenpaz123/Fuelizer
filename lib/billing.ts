@@ -59,8 +59,9 @@ export function calculateNetCost(
 }
 
 /**
- * Calculates the "Upcoming Bill" widget for `referenceDate`'s calendar
- * month, combining two different billing cycles per payment method:
+ * Calculates the "Upcoming Bill" / "Regular Mode" "This Month's Expenses"
+ * widget for `referenceDate`'s calendar month, combining two different
+ * billing cycles per payment method:
  *
  * - **Pazomat** lags `pazomatBillingDelayMonths` months behind: with a
  *   2-month delay, an August bill covers Pazomat fuel pumped in June.
@@ -73,10 +74,19 @@ export function calculateNetCost(
  *   isn't user-configurable — it's how the payment method itself settles,
  *   not a preference.
  *
- * The combined total is Pazomat's lagged subtotal + Credit Card's
- * current-month subtotal — see `pazomat`/`creditCard` on the result for the
- * breakdown, and `transactions`/`totalNetCost`/`totalLiters`/
- * `transactionCount` for the two combined.
+ * `hasPazomat` is `user_settings.has_pazomat` ("Regular Mode" toggle, fall
+ * back to `DEFAULT_HAS_PAZOMAT` at the call site). When false, the lag
+ * collapses to 0 regardless of `pazomatBillingDelayMonths` -- a user
+ * without a Pazomat card is telling us their (or any stray legacy) Pazomat
+ * rows aren't on a separate billing cycle either, so everything just gets
+ * counted from the current month, same as Credit Card. The widget still
+ * ends up correct even with no Pazomat rows at all: `pazomat` comes back
+ * an empty breakdown and the combined total is just Credit Card's.
+ *
+ * The combined total is Pazomat's subtotal + Credit Card's current-month
+ * subtotal — see `pazomat`/`creditCard` on the result for the breakdown,
+ * and `transactions`/`totalNetCost`/`totalLiters`/`transactionCount` for
+ * the two combined.
  *
  * `pazomatDiscountPerLiter` — see calculateNetCost's doc comment.
  */
@@ -84,10 +94,12 @@ export function calculateUpcomingBill(
   transactions: FuelTransaction[],
   pazomatDiscountPerLiter: number,
   pazomatBillingDelayMonths: number,
+  hasPazomat: boolean,
   referenceDate: Date = new Date()
 ): UpcomingBillResult {
   const billingMonthStart = startOfMonthUTC(referenceDate);
-  const pazomatSourceMonthStart = addMonthsUTC(billingMonthStart, -pazomatBillingDelayMonths);
+  const effectiveDelayMonths = hasPazomat ? pazomatBillingDelayMonths : 0;
+  const pazomatSourceMonthStart = addMonthsUTC(billingMonthStart, -effectiveDelayMonths);
 
   const pazomat = buildBreakdown(transactions, "Pazomat", pazomatSourceMonthStart, pazomatDiscountPerLiter);
   const creditCard = buildBreakdown(transactions, "Credit Card", billingMonthStart, pazomatDiscountPerLiter);

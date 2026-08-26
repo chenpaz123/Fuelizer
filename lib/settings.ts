@@ -11,3 +11,7 @@ export const DEFAULT_TANK_CAPACITY_LITERS = 35;
 // Mirrors user_settings.pazomat_billing_delay_months' column default in
 // supabase/migrations/0007_add_billing_delay.sql.
 export const DEFAULT_PAZOMAT_BILLING_DELAY_MONTHS = 2;
+// Mirrors user_settings.has_pazomat's column default in
+// supabase/migrations/0008_add_has_pazomat.sql -- true so a user who
+// hasn't saved /settings yet still sees today's Pazomat-enabled behavior.
+export const DEFAULT_HAS_PAZOMAT = true;

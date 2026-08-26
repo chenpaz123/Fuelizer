@@ -6,21 +6,33 @@ const PAYMENT_METHOD_LABELS = {
   "Credit Card": "אשראי",
 } as const;
 
-export function UpcomingBillCard({ bill }: { bill: UpcomingBillResult }) {
+export function UpcomingBillCard({ bill, hasPazomat }: { bill: UpcomingBillResult; hasPazomat: boolean }) {
+  const title = hasPazomat
+    ? `החיוב הקרוב · ${bill.billingMonth.label}`
+    : `הוצאות החודש · ${bill.billingMonth.label}`;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>החיוב הקרוב · {bill.billingMonth.label}</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1">
           <p className="text-3xl font-bold tabular-nums">₪{bill.totalNetCost.toFixed(2)}</p>
-          {/* Pazomat lags 2 months behind Credit Card's current-month cycle
-              (see lib/billing.ts), so each breakdown line needs its own
-              source-month label -- a single combined subtitle would imply
-              both groups came from the same month. */}
-          <BreakdownLine label={PAYMENT_METHOD_LABELS.Pazomat} breakdown={bill.pazomat} />
-          <BreakdownLine label={PAYMENT_METHOD_LABELS["Credit Card"]} breakdown={bill.creditCard} />
+          {/* "Regular Mode" (no Pazomat card) has only one cycle -- the
+              current month, same as Credit Card's -- so the Pazomat/Credit
+              Card split would be redundant with the total above and is
+              skipped entirely instead of shown as two identical-month lines. */}
+          {hasPazomat && (
+            <>
+              {/* Pazomat lags behind Credit Card's current-month cycle (see
+                  lib/billing.ts), so each breakdown line needs its own
+                  source-month label -- a single combined subtitle would
+                  imply both groups came from the same month. */}
+              <BreakdownLine label={PAYMENT_METHOD_LABELS.Pazomat} breakdown={bill.pazomat} />
+              <BreakdownLine label={PAYMENT_METHOD_LABELS["Credit Card"]} breakdown={bill.creditCard} />
+            </>
+          )}
         </div>
 
         {bill.transactions.length > 0 && (

@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  DEFAULT_HAS_PAZOMAT,
   DEFAULT_PAZOMAT_BILLING_DELAY_MONTHS,
   DEFAULT_PAZOMAT_DISCOUNT_PER_LITER,
   DEFAULT_TANK_CAPACITY_LITERS,
@@ -36,6 +37,7 @@ export default async function SettingsPage() {
         initialPazomatBillingDelayMonths={
           settings?.pazomat_billing_delay_months ?? DEFAULT_PAZOMAT_BILLING_DELAY_MONTHS
         }
+        initialHasPazomat={settings?.has_pazomat ?? DEFAULT_HAS_PAZOMAT}
       />
 
       <Card>

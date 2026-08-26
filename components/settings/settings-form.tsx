@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 type Status = "idle" | "saving" | "saved" | "error";
 
@@ -20,16 +21,19 @@ export function SettingsForm({
   initialPazomatDiscount,
   initialTankCapacity,
   initialPazomatBillingDelayMonths,
+  initialHasPazomat,
 }: {
   initialPazomatDiscount: number;
   initialTankCapacity: number;
   initialPazomatBillingDelayMonths: number;
+  initialHasPazomat: boolean;
 }) {
   const [pazomatDiscount, setPazomatDiscount] = useState(String(initialPazomatDiscount));
   const [tankCapacity, setTankCapacity] = useState(String(initialTankCapacity));
   const [pazomatBillingDelayMonths, setPazomatBillingDelayMonths] = useState(
     String(initialPazomatBillingDelayMonths)
   );
+  const [hasPazomat, setHasPazomat] = useState(initialHasPazomat);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +61,7 @@ export function SettingsForm({
         tank_capacity_liters: capacity,
         // Always one of BILLING_DELAY_OPTIONS -- it's a <Select>, not a free-typed field, so no separate validation needed.
         pazomat_billing_delay_months: Number(pazomatBillingDelayMonths),
+        has_pazomat: hasPazomat,
       });
       setStatus("saved");
       setTimeout(() => setStatus((prev) => (prev === "saved" ? "idle" : prev)), 2000);
@@ -73,18 +78,44 @@ export function SettingsForm({
         <CardTitle>הגדרות תדלוק</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="pazomat_discount">הנחת פזומט לליטר (₪ לליטר)</Label>
-          <Input
-            id="pazomat_discount"
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            value={pazomatDiscount}
-            onChange={(e) => setPazomatDiscount(e.target.value)}
-          />
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="has_pazomat" className="flex-1">
+            יש לי מנוי פזומט / דלקן
+          </Label>
+          <Switch id="has_pazomat" checked={hasPazomat} onCheckedChange={setHasPazomat} />
         </div>
+
+        {hasPazomat && (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="pazomat_discount">הנחת פזומט לליטר (₪ לליטר)</Label>
+              <Input
+                id="pazomat_discount"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={pazomatDiscount}
+                onChange={(e) => setPazomatDiscount(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="pazomat_billing_delay_months">עיכוב חיוב פזומט (בחודשים)</Label>
+              <Select
+                id="pazomat_billing_delay_months"
+                value={pazomatBillingDelayMonths}
+                onChange={(e) => setPazomatBillingDelayMonths(e.target.value)}
+              >
+                {BILLING_DELAY_OPTIONS.map((months) => (
+                  <option key={months} value={months}>
+                    {months === 0 ? "ללא עיכוב" : months === 1 ? "חודש אחד" : `${months} חודשים`}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="tank_capacity">נפח מיכל דלק (ליטר)</Label>
@@ -97,21 +128,6 @@ export function SettingsForm({
             value={tankCapacity}
             onChange={(e) => setTankCapacity(e.target.value)}
           />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="pazomat_billing_delay_months">עיכוב חיוב פזומט (בחודשים)</Label>
-          <Select
-            id="pazomat_billing_delay_months"
-            value={pazomatBillingDelayMonths}
-            onChange={(e) => setPazomatBillingDelayMonths(e.target.value)}
-          >
-            {BILLING_DELAY_OPTIONS.map((months) => (
-              <option key={months} value={months}>
-                {months === 0 ? "ללא עיכוב" : months === 1 ? "חודש אחד" : `${months} חודשים`}
-              </option>
-            ))}
-          </Select>
         </div>
 
         <Button className="w-full" onClick={handleSave} disabled={status === "saving"}>

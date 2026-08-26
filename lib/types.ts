@@ -66,9 +66,9 @@ export type FuelCycleInsert = Pick<
 /**
  * Row shape of `public.user_settings`. Mirrors
  * supabase/migrations/0004_user_settings.sql plus
- * 0007_add_billing_delay.sql. One row per user, upserted from /settings —
- * see lib/settings.ts for the fallback defaults used before a user has
- * ever saved one.
+ * 0007_add_billing_delay.sql and 0008_add_has_pazomat.sql. One row per
+ * user, upserted from /settings — see lib/settings.ts for the fallback
+ * defaults used before a user has ever saved one.
  */
 export type UserSettings = {
   user_id: string;
@@ -76,22 +76,28 @@ export type UserSettings = {
   tank_capacity_liters: number;
   /** Months between a Pazomat fill-up and it appearing on the Upcoming Bill widget. Credit Card has no equivalent -- always 0. */
   pazomat_billing_delay_months: number;
+  /** "Regular Mode" master toggle -- false hides all Pazomat-specific UI/logic (settings fields, the Lab scanner's Pazomat option, the Upcoming Bill 2-cycle split). */
+  has_pazomat: boolean;
   created_at: string;
   updated_at: string;
 };
 
-// The settings form always submits all three fields together (there's no
+// The settings form always submits all four fields together (there's no
 // partial save), and user_id is filled in server-side from the session —
 // so this is exactly what app/settings/actions.ts's upsert needs, no
 // Partial<> needed.
 export type UserSettingsInsert = Pick<
   UserSettings,
-  "user_id" | "pazomat_discount_per_liter" | "tank_capacity_liters" | "pazomat_billing_delay_months"
+  | "user_id"
+  | "pazomat_discount_per_liter"
+  | "tank_capacity_liters"
+  | "pazomat_billing_delay_months"
+  | "has_pazomat"
 >;
 
 export type UserSettingsInput = Pick<
   UserSettings,
-  "pazomat_discount_per_liter" | "tank_capacity_liters" | "pazomat_billing_delay_months"
+  "pazomat_discount_per_liter" | "tank_capacity_liters" | "pazomat_billing_delay_months" | "has_pazomat"
 >;
 
 // Minimal Database type for @supabase/ssr generics.

@@ -66,9 +66,11 @@ const REQUIRED_FIELD_LABELS: Partial<Record<keyof DraftFields, string>> = {
 export function ReceiptScanner({
   userId,
   lastOdometerKm,
+  hasPazomat,
 }: {
   userId: string;
   lastOdometerKm: number | null;
+  hasPazomat: boolean;
 }) {
   const router = useRouter();
 
@@ -390,7 +392,7 @@ export function ReceiptScanner({
                 value={draft.payment_method}
                 onChange={(e) => updateDraft("payment_method", e.target.value as PaymentMethod)}
               >
-                <option value="Pazomat">פזומט</option>
+                {hasPazomat && <option value="Pazomat">פזומט</option>}
                 <option value="Credit Card">כרטיס אשראי</option>
               </Select>
             </div>
