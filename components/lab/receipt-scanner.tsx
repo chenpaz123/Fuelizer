@@ -233,7 +233,7 @@ export function ReceiptScanner({
         <Card>
           <CardContent className="space-y-4 p-5">
             <div className="space-y-1 text-center">
-              <p className="font-semibold">צלמו את קבלת התדלוק ולוח המחוונים</p>
+              <p className="font-semibold">הוסיפו את קבלת התדלוק ולוח המחוונים</p>
               <p className="text-sm text-muted-foreground">
                 נזהה אוטומטית את הליטרים, המחיר והנתונים משתי התמונות
               </p>
@@ -454,7 +454,10 @@ function CaptureSlot({
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
+        // No `capture` attribute: leaving it unset (rather than
+        // "environment") is what makes iOS/Android offer their native
+        // "Take Photo" vs. "Photo Library"/"Files" picker sheet, so a
+        // digital receipt screenshot can be uploaded instead of re-shooting it.
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -494,7 +497,7 @@ function CaptureSlot({
           ) : (
             <Icon className="h-7 w-7 text-primary" />
           )}
-          <span className="text-sm font-medium">צלם {label}</span>
+          <span className="text-sm font-medium">הוסף {label}</span>
         </button>
       )}
     </div>
