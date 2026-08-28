@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Fuelizer",
     short_name: "Fuelizer",
-    description: "מעקב תדלוקים, טלמטריה וחיוב עבור הקיה פיקנטו שלכם",
+    description: "מעקב תדלוקים, טלמטריה וחיוב עבור הרכב שלכם",
     start_url: "/dashboard",
     display: "standalone",
     orientation: "portrait",

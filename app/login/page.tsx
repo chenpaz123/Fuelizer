@@ -46,7 +46,7 @@ function LoginForm() {
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">ברוכים הבאים ל-Fuelizer</h1>
         <p className="text-sm text-muted-foreground">
-          מעקב תדלוקים, טלמטריה וחיוב עבור הקיה פיקנטו שלכם
+          מעקב תדלוקים, טלמטריה וחיוב עבור הרכב שלכם
         </p>
       </div>
 

@@ -2,7 +2,7 @@
   "name": "fuelizer",
   "version": "0.1.0",
   "private": true,
-  "description": "Fuel tracking, telemetry analysis, and billing app for a Kia Picanto.",
+  "description": "Fuel tracking, telemetry analysis, and billing app for any vehicle.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

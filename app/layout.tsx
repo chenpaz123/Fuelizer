@@ -10,7 +10,7 @@ const heebo = Heebo({ subsets: ["hebrew", "latin"], variable: "--font-heebo" });
 
 export const metadata: Metadata = {
   title: "Fuelizer",
-  description: "מעקב תדלוקים, טלמטריה וחיוב עבור הקיה פיקנטו שלכם",
+  description: "מעקב תדלוקים, טלמטריה וחיוב עבור הרכב שלכם",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

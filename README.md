@@ -1,6 +1,6 @@
 # Fuelizer
 
-Fuel tracking, telemetry analysis, and billing for a Kia Picanto. Next.js (App
+Fuel tracking, telemetry analysis, and billing for any vehicle. Next.js (App
 Router) + Supabase (Postgres, Auth, Storage), deployed on Vercel.
 
 ## What's here
