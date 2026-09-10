@@ -13,7 +13,13 @@ const TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions";
 // account's Together dashboard (Models -> filter: Vision, Serverless)
 // currently shows as serverless, then redeploy/restart.
 const VISION_MODEL = process.env.TOGETHER_VISION_MODEL || "google/gemma-4-31B-it";
-const REQUEST_TIMEOUT_MS = 30_000;
+// Was 30s -- production logs showed real Together AI calls (2 images,
+// google/gemma-4-31B-it) exceeding that under normal provider latency,
+// aborting with a TimeoutError and dropping the user into the manual-entry
+// fallback instead of the auto-filled review card. 45s gives real headroom
+// while staying under app/lab/page.tsx's `maxDuration = 60`, the Vercel
+// Server Action budget this call actually runs inside.
+const REQUEST_TIMEOUT_MS = 45_000;
 
 const SYSTEM_PROMPT = `You are a strict OCR/data-extraction engine for a car fuel-tracking app. You will be shown one or two photos: a gas station receipt (often printed in Hebrew) and/or a car's dashboard/trip computer display. They may be provided as a single combined image or as two separate images — read across all of them together as one source of truth.
 
