@@ -7,12 +7,20 @@ export type { ReceiptExtraction };
 const TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions";
 // Together AI periodically moves models between its pay-per-token
 // "serverless" pool and paid dedicated-endpoint-only tiers (Qwen2.5-VL-72B
-// was serverless, then wasn't — see the 400 "model_not_available" error if
-// this one stops working too). Overridable without a redeploy: change
-// TOGETHER_VISION_MODEL in Vercel's project env vars to whatever your
-// account's Together dashboard (Models -> filter: Vision, Serverless)
-// currently shows as serverless, then redeploy/restart.
-const VISION_MODEL = process.env.TOGETHER_VISION_MODEL || "google/gemma-4-31B-it";
+// was serverless, then wasn't; google/gemma-4-31B-it was this default next
+// and started failing in production on 2026-10-08 with a 400
+// "model_not_available": "Unable to access non-serverless model" — see the
+// same error if this one stops working too). meta-llama/Llama-Vision-Free
+// is Together's own documented free-tier vision endpoint, chosen for cost
+// as much as availability — verify it's still free and serverless on your
+// account's Together dashboard (Models -> filter: Vision, Serverless) if
+// it ever starts failing. Overridable without a code change: set
+// TOGETHER_VISION_MODEL in Vercel's project env vars to whatever that
+// filtered list currently shows, then redeploy (env var changes don't
+// apply to an already-built deployment) — this is exactly how the
+// 2026-10-08 incident was worked around before this default was updated
+// to match.
+const VISION_MODEL = process.env.TOGETHER_VISION_MODEL || "meta-llama/Llama-Vision-Free";
 // Was 30s -- production logs showed real Together AI calls (2 images,
 // google/gemma-4-31B-it) exceeding that under normal provider latency,
 // aborting with a TimeoutError and dropping the user into the manual-entry
