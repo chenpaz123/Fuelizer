@@ -22,7 +22,11 @@ describe("calculateNetCost", () => {
 });
 
 describe("calculateUpcomingBill", () => {
-  const referenceDate = new Date(Date.UTC(2026, 7, 25)); // August 2026
+  // The 1st of the month specifically, so this suite's "billing month" is
+  // the same as referenceDate's own calendar month (see the "Pazomat's
+  // billing date is always the 1st of the month" suite below for what
+  // happens on any other day).
+  const referenceDate = new Date(Date.UTC(2026, 7, 1)); // August 2026
 
   const transactions: FuelTransaction[] = [
     // Pazomat, pumped two months prior (June) -- billed now, per its lag.
@@ -93,7 +97,7 @@ describe("calculateUpcomingBill", () => {
     const janTransactions: FuelTransaction[] = [
       { id: "8", entryDate: "2025-11-15", pumpedLiters: 25, fullPricePaid: 175, paymentMethod: "Pazomat" },
     ];
-    const result = calculateUpcomingBill(janTransactions, 0.58, 2, true, new Date(Date.UTC(2026, 0, 10))); // January 2026
+    const result = calculateUpcomingBill(janTransactions, 0.58, 2, true, new Date(Date.UTC(2026, 0, 1))); // January 2026
 
     expect(result.pazomat.sourceMonth).toMatchObject({ year: 2025, month: 11 });
     expect(result.pazomat.transactionCount).toBe(1);
@@ -185,6 +189,51 @@ describe("calculateUpcomingBill", () => {
       expect(result.pazomat.transactionCount).toBe(0);
       expect(result.transactionCount).toBe(2);
       expect(result.totalNetCost).toBeCloseTo(210 + 70, 2);
+    });
+  });
+
+  describe("Pazomat's billing date is always the 1st of the month", () => {
+    // Reproduces the real-world bug report: on a mid-month referenceDate,
+    // the upcoming Pazomat bill must be anchored to the *next* 1st-of-month
+    // billing date, not to referenceDate's own (already-billed) calendar
+    // month -- otherwise the widget keeps showing a bill that already
+    // posted weeks ago (August's) instead of the one that's actually still
+    // upcoming (September's, posting November 1st).
+    const billTransactions: FuelTransaction[] = [
+      { id: "aug", entryDate: "2026-08-15", pumpedLiters: 20, fullPricePaid: 140, paymentMethod: "Pazomat" },
+      { id: "sep", entryDate: "2026-09-15", pumpedLiters: 20, fullPricePaid: 140, paymentMethod: "Pazomat" },
+      { id: "oct-cc", entryDate: "2026-10-08", pumpedLiters: 25, fullPricePaid: 175, paymentMethod: "Credit Card" },
+    ];
+
+    it("mid-month, with a 2-month delay, bills next month's Pazomat bill -- not this month's, already posted", () => {
+      const result = calculateUpcomingBill(billTransactions, 0.58, 2, true, new Date(Date.UTC(2026, 9, 22))); // Oct 22
+
+      expect(result.billingMonth).toMatchObject({ year: 2026, month: 11 }); // November's bill is the upcoming one
+      expect(result.pazomat.sourceMonth).toMatchObject({ year: 2026, month: 9 }); // Nov - 2 = September
+      expect(result.pazomat.transactions.map((t) => t.id)).toEqual(["sep"]);
+    });
+
+    it("exactly on the 1st, bills that same month's Pazomat bill -- doesn't skip ahead an extra month", () => {
+      const result = calculateUpcomingBill(billTransactions, 0.58, 2, true, new Date(Date.UTC(2026, 10, 1))); // Nov 1
+
+      expect(result.billingMonth).toMatchObject({ year: 2026, month: 11 });
+      expect(result.pazomat.sourceMonth).toMatchObject({ year: 2026, month: 9 }); // Nov - 2 = September
+      expect(result.pazomat.transactions.map((t) => t.id)).toEqual(["sep"]);
+    });
+
+    it("Credit Card keeps tracking referenceDate's real calendar month regardless of the Pazomat rollover", () => {
+      const result = calculateUpcomingBill(billTransactions, 0.58, 2, true, new Date(Date.UTC(2026, 9, 22))); // Oct 22
+
+      expect(result.creditCard.sourceMonth).toMatchObject({ year: 2026, month: 10 });
+      expect(result.creditCard.transactions.map((t) => t.id)).toEqual(["oct-cc"]);
+    });
+
+    it("Regular Mode (hasPazomat = false) never rolls forward -- always the real current month", () => {
+      const result = calculateUpcomingBill(billTransactions, 0.58, 2, false, new Date(Date.UTC(2026, 9, 22))); // Oct 22
+
+      expect(result.billingMonth).toMatchObject({ year: 2026, month: 10 });
+      expect(result.pazomat.sourceMonth).toMatchObject({ year: 2026, month: 10 });
+      expect(result.pazomat.transactionCount).toBe(0); // no Pazomat fuel pumped in October itself
     });
   });
 });
